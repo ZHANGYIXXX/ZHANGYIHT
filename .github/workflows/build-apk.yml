@@ -1,0 +1,134 @@
+name: CI: 云端编译 APK
+
+# 云端编译（自诊断版 v4）
+# 关键：本工程代码按 Flutter 3.47 编写（见 .dart_tool/version = 3.47.2），
+# 早前用 3.24.5 编译时因 API 不存在而 Dart 编译失败
+#（:app:compileFlutterBuildRelease → flutter exit 1）。
+# 故改为跟随最新 stable（>= 3.47），并由同一版本重建 android 骨架保证一致。
+on:
+  push:
+    branches: [ main, master ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          # 只给 channel，不给 flutter-version —— 表示"取最新稳定版"。
+          # 绝不能写 flutter-version: stable（该参数只认具体版本号，会直接失败）。
+          channel: 'stable'
+          cache: true
+
+      - name: Show environment
+        run: |
+          flutter --version
+          java -version
+          echo "ANDROID_HOME=$ANDROID_HOME"
+
+      - name: Regenerate android scaffold with this exact Flutter version
+        run: |
+          cp lib/main.dart /tmp/main_backup.dart
+          cp pubspec.yaml /tmp/pubspec_backup.yaml
+          rm -rf android
+          flutter create --platforms=android --org com.yizhanghe --project-name yizhanghe . 2>&1 | tee /tmp/create.log
+          cp /tmp/main_backup.dart lib/main.dart
+          cp /tmp/pubspec_backup.yaml pubspec.yaml
+          grep distributionUrl android/gradle/wrapper/gradle-wrapper.properties
+
+      - name: Inject camera and gallery permissions
+        run: |
+          sed -i 's|</manifest>|    <uses-permission android:name="android.permission.READ_MEDIA_IMAGES" />\n    <uses-permission android:name="android.permission.CAMERA" />\n</manifest>|' android/app/src/main/AndroidManifest.xml
+          grep "uses-permission" android/app/src/main/AndroidManifest.xml
+
+      - name: Restore launcher icons
+        # flutter create 会生成默认 Flutter logo 图标，必须从仓库 assets/icon/ 备份恢复「壹核 ZHANG」图标
+        # 5 个密度：mdpi/hdpi/xhdpi/xxhdpi/xxxhdpi；预生成 PNG 直接拷，无需 PIL
+        run: |
+          set -e
+          for d in mdpi hdpi xhdpi xxhdpi xxxhdpi; do
+            cp -f "assets/icon/mipmap-$d/ic_launcher.png" "android/app/src/main/res/mipmap-$d/ic_launcher.png"
+          done
+          echo "Restored launcher icons:"
+          ls -la android/app/src/main/res/mipmap-*/ic_launcher.png
+
+      - name: Accept Android licenses and install missing SDK packages
+        run: |
+          export ANDROID_SDK_ROOT="${ANDROID_SDK_ROOT:-$ANDROID_HOME}"
+          export PATH="$ANDROID_SDK_ROOT/cmdline-tools/latest/bin:$ANDROID_SDK_ROOT/tools/bin:$PATH"
+          yes | flutter doctor --android-licenses 2>&1 | tee /tmp/licenses.log || true
+          yes | sdkmanager --licenses 2>&1 | tee -a /tmp/licenses.log || true
+          sdkmanager "platform-tools" "platforms;android-35" "build-tools;35.0.0" 2>&1 | tee -a /tmp/licenses.log || true
+
+      - name: Create temporary Android keystore
+        # -dname 必须给，否则 keytool 会交互式提示，CI 非交互环境无人应答 → 失败
+        run: |
+          set -o pipefail
+          keytool -genkeypair -v \
+            -keystore android/app/ci-release.keystore \
+            -alias ci \
+            -keyalg RSA \
+            -keysize 2048 \
+            -validity 10000 \
+            -dname "CN=CI Build, OU=Dev, O=Yizhang, L=Guiyang, ST=Guizhou, C=CN" \
+            -storepass android \
+            -keypass android 2>&1 | tee /tmp/keytool.log
+          printf 'storeFile=ci-release.keystore\nstorePassword=android\nkeyAlias=ci\nkeyPassword=android\n' > android/key.properties
+          cat android/key.properties
+
+      - name: Get dependencies
+        run: flutter pub get 2>&1 | tee /tmp/pubget.log
+
+      - name: Build release APK
+        run: |
+          set -o pipefail
+          flutter build apk --release 2>&1 | tee /tmp/build.log
+
+      - name: Verify APK produced
+        run: |
+          if [ ! -f build/app/outputs/flutter-apk/app-release.apk ]; then
+            echo "::error::APK file not found - build did not produce output"
+            exit 1
+          fi
+          ls -la build/app/outputs/flutter-apk/app-release.apk
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: app-release-apk
+          path: build/app/outputs/flutter-apk/app-release.apk
+          if-no-files-found: error
+
+      - name: Report failure details
+        # 兜底：任何步骤失败都上报。重点抓 Dart 编译错误行（lib/...: Error: ...）
+        if: failure()
+        run: |
+          {
+            echo "### Dart / build errors"
+            echo '```'
+            if [ -f /tmp/build.log ]; then
+              grep -nE "^lib/|^test/|\.dart:[0-9]+|Error:|error •|is not defined|isn't defined|Undefined|Cannot |Expected |Unexpected |Unresolved " /tmp/build.log | head -50
+            fi
+            echo '```'
+            echo ""
+            echo "### build.log tail 60"
+            echo '```'
+            [ -f /tmp/build.log ] && tail -60 /tmp/build.log
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+          DART=$(grep -nE "\.dart:[0-9]+|Error:|is not defined|isn't defined|Undefined|Expected " /tmp/build.log 2>/dev/null | head -20 | tr '\n' ' ' | cut -c1-2500)
+          if [ -z "$DART" ]; then
+            DART=$(tail -30 /tmp/build.log 2>/dev/null | tr '\n' ' ' | cut -c1-2500)
+          fi
+          echo "::error title=Build failed::${DART}"
