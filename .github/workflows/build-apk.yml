@@ -1,4 +1,4 @@
-name: CI: 云端编译 APK
+name: Build APK
 
 # 云端编译（自诊断版 v4）
 # 关键：本工程代码按 Flutter 3.47 编写（见 .dart_tool/version = 3.47.2），
