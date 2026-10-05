@@ -109,16 +109,15 @@ jobs:
               }
 
               signingConfigs {
+                  # 固定签名：仓库内 ci/release.p12.b64 解码得到 release.p12（同一步骤已写入 android/app/）。
+                  # 直接硬编码已知常量，避免 AGP 9.0 / Gradle Kotlin DSL 脚本里 java.util.Properties 无法解析的问题。
+                  # 所有出包统一使用同一把固定签名 → 手机可直接覆盖安装，无需卸载旧版。
                   create("release") {
-                      val keyPropsFile = rootProject.file("key.properties")
-                      if (keyPropsFile.exists()) {
-                          val props = java.util.Properties().apply { load(keyPropsFile.inputStream()) }
-                          storeFile = file(props["storeFile"] as String)
-                          storePassword = props["storePassword"] as String
-                          keyAlias = props["keyAlias"] as String
-                          keyPassword = props["keyPassword"] as String
-                          storeType = props["storeType"] as String? ?: "pkcs12"
-                      }
+                      storeFile = file("release.p12")
+                      storePassword = "yizhanghe-release-2026"
+                      keyAlias = "yizhanghe"
+                      keyPassword = "yizhanghe-release-2026"
+                      storeType = "pkcs12"
                   }
               }
 
