@@ -1,13 +1,16 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:image_picker/image_picker.dart';
 import '../../theme/tokens.dart';
 import '../../theme/nu.dart';
 import '../../logic/providers.dart';
 import '../../logic/format.dart';
+import '../../logic/delete_helper.dart';
 import '../../data/models/item.dart';
-import '../../data/daos/item_dao.dart';
-import '../../data/image_store.dart';
 import '../../widgets/cover_thumb.dart';
+import '../../widgets/cover_carousel.dart';
+import '../../widgets/image_viewer.dart';
 
 class ItemDetailPage extends ConsumerWidget {
   final Item it;
@@ -18,22 +21,25 @@ class ItemDetailPage extends ConsumerWidget {
         backgroundColor: Tokens.bg,
         appBar: AppBar(backgroundColor: Colors.transparent, elevation: 0,
             leading: GestureDetector(onTap: () => Navigator.pop(context),
-                child: const Icon(Icons.arrow_back, color: Tokens.text)),
-            title: Text(it.type, style: const TextStyle(color: Tokens.text))),
+                child: Icon(Icons.arrow_back, color: Tokens.text)),
+            title: Text(it.type, style: TextStyle(color: Tokens.text))),
         body: SafeArea(
           child: ListView(padding: const EdgeInsets.all(16), children: [
             NeumorphicBox(radius: Tokens.rCard, padding: const EdgeInsets.all(16), child:
               Row(children: [
-                CoverThumb(rel: it.coverPath, size: 84),
+                _cover(), // 点封面看大图（CI 反馈 #2）
                 const SizedBox(width: 16),
                 Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                  Text(it.type, style: const TextStyle(fontSize: Tokens.fsEmph, fontWeight: FontWeight.bold, color: Tokens.text)),
+                  Text(it.name.isNotEmpty ? it.name : it.type, style: TextStyle(fontSize: Tokens.fsEmph, fontWeight: FontWeight.bold, color: Tokens.text)),
                   const SizedBox(height: 6),
-                  Text('${it.category} · ${it.variety}', style: const TextStyle(color: Tokens.muted)),
+                  if (it.name.isNotEmpty)
+                    Text(it.type, style: TextStyle(color: Tokens.muted, fontSize: Tokens.fsHint)),
+                  if (it.name.isNotEmpty) const SizedBox(height: 6),
+                  Text('${it.category} · ${it.variety}', style: TextStyle(color: Tokens.muted)),
                   const SizedBox(height: 8),
-                  Text(it.code, style: const TextStyle(color: Tokens.faint, fontSize: Tokens.fsHint)),
+                  Text(it.code, style: TextStyle(color: Tokens.faint, fontSize: Tokens.fsHint)),
                   const SizedBox(height: 6),
-                  Text(formatPrice(it.price), style: const TextStyle(fontSize: Tokens.fsEmph, color: Tokens.accent, fontWeight: FontWeight.w700)),
+                  Text(formatPrice(it.price), style: TextStyle(fontSize: Tokens.fsEmph, color: Tokens.accent, fontWeight: FontWeight.w700)),
                 ])),
               ]),
             ),
@@ -52,16 +58,36 @@ class ItemDetailPage extends ConsumerWidget {
             const SizedBox(height: 24),
             GestureDetector(onTap: () => _confirmDelete(context, ref), child:
               NeumorphicBox(state: NeuState.raised, radius: Tokens.rBtn, padding: const EdgeInsets.symmetric(vertical: 14),
-                  child: const Center(child: Text('删除这件', style: TextStyle(color: Tokens.badD10, fontWeight: FontWeight.w700))))),
+                  child: Center(child: Text('删除这件', style: TextStyle(color: Tokens.badD10, fontWeight: FontWeight.w700))))),
           ]),
         ),
+      );
+
+  /// 封面：点开全屏大图（CI 反馈 #2 —— 之前点了没反应）
+  Widget _cover() => FutureBuilder<List<String>>(
+        future: resolvePaths([it.coverPath]),
+        builder: (c, s) {
+          final abs = s.data ?? const <String>[];
+          if (abs.isEmpty) return CoverThumb(rel: it.coverPath, size: 84);
+          return GestureDetector(
+            onTap: () => Navigator.of(context).push(MaterialPageRoute(
+              builder: (_) => ImageViewer(
+                  files: abs.map((p) => XFile(p)).toList(), initial: 0),
+            )),
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(12),
+              child: Image.file(File(abs[0]),
+                  width: 84, height: 84, fit: BoxFit.cover),
+            ),
+          );
+        },
       );
 
   Widget _section(String title, List<Widget> children) => Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Padding(padding: const EdgeInsets.only(left: 4, bottom: 8),
-              child: Text(title, style: const TextStyle(fontSize: Tokens.fsHint, color: Tokens.muted, fontWeight: FontWeight.w700))),
+              child: Text(title, style: TextStyle(fontSize: Tokens.fsHint, color: Tokens.muted, fontWeight: FontWeight.w700))),
           NeumorphicBox(radius: Tokens.rCard, padding: const EdgeInsets.all(16), child: Column(children: children)),
           const SizedBox(height: 16),
         ],
@@ -69,9 +95,9 @@ class ItemDetailPage extends ConsumerWidget {
 
   Widget _kv(String k, String v) => Padding(padding: const EdgeInsets.symmetric(vertical: 6),
       child: Row(children: [
-        if (k.isNotEmpty) Text(k, style: const TextStyle(color: Tokens.muted, fontSize: Tokens.fsBody)),
+        if (k.isNotEmpty) Text(k, style: TextStyle(color: Tokens.muted, fontSize: Tokens.fsBody)),
         if (k.isNotEmpty) const Spacer(),
-        Expanded(child: Text(v, style: const TextStyle(color: Tokens.text, fontSize: Tokens.fsBody), textAlign: k.isEmpty ? TextAlign.left : TextAlign.right)),
+        Expanded(child: Text(v, style: TextStyle(color: Tokens.text, fontSize: Tokens.fsBody), textAlign: k.isEmpty ? TextAlign.left : TextAlign.right)),
       ]));
 
   void _confirmDelete(BuildContext context, WidgetRef ref) {
@@ -80,13 +106,12 @@ class ItemDetailPage extends ConsumerWidget {
       content: Text('将删除「${it.type}」及其所有原图，不可恢复。'),
       actions: [
         TextButton(onPressed: () => Navigator.pop(context), child: const Text('取消')),
-        TextButton(onPressed: () async {
-          await ImageStore.deleteDir('item', it.id!);
-          await ItemDao.delete(it.id!);
-          if (Navigator.canPop(context)) Navigator.pop(context);
+        TextButton(                    onPressed: () async {
+                      await DeleteHelper.item(it.id!);
+                      if (Navigator.canPop(context)) Navigator.pop(context);
           refreshCollection(ref);
           if (Navigator.canPop(context)) Navigator.pop(context);
-        }, child: const Text('删除', style: TextStyle(color: Tokens.badD10))),
+        }, child: Text('删除', style: TextStyle(color: Tokens.badD10))),
       ],
     ));
   }

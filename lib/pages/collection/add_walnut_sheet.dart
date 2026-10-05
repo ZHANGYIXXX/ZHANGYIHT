@@ -15,7 +15,9 @@ import '../../data/daos/patina_dao.dart';
 import '../../data/image_store.dart';
 import '../../widgets/image_pick_sheet.dart';
 import '../../widgets/image_viewer.dart';
+import '../../widgets/neu_select.dart';
 
+/// 新增/编辑核桃：全屏页面（CI 反馈 #1 —— 半屏时手机打字看不到填写内容）
 class AddWalnutSheet extends ConsumerStatefulWidget {
   /// 编辑模式：传入即预填，保存时 update；为空则是新增
   final Walnut? editWalnut;
@@ -47,6 +49,7 @@ class _AddWalnutSheetState extends ConsumerState<AddWalnutSheet> {
   final _rGao = TextEditingController();
   final _weight = TextEditingController();
   bool _full = false, _repaired = false, _yellow = false;
+  bool _saving = false;
   XFile? _cover; // 本次新选封面
   XFile? _existingCover; // 编辑时已有的封面（解析为文件）
   final List<XFile> _patina = [];
@@ -98,33 +101,96 @@ class _AddWalnutSheetState extends ConsumerState<AddWalnutSheet> {
 
   @override
   Widget build(BuildContext context) {
-    // 可用高度 = 屏高 - 键盘；底部再留系统导航栏，确保操作栏不被遮挡/溢出
-    final mq = MediaQuery.of(context);
-    final avail = mq.size.height - mq.viewInsets.bottom;
-    final bottomPad = mq.viewInsets.bottom + mq.padding.bottom;
-    return Container(
-      constraints: BoxConstraints(maxHeight: avail * 0.92),
-      decoration: const BoxDecoration(
-          color: Tokens.bg, borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
-      padding: EdgeInsets.only(
-          bottom: bottomPad, left: 16, right: 16, top: 12),
-      child: Column(mainAxisSize: MainAxisSize.min, children: [
-        _stepper(),
-        const SizedBox(height: 10),
-        Flexible(
-          child: SingleChildScrollView(
-            child: _step == 1 ? _step1() : _step2(),
-          ),
+    // 全屏页面：键盘弹起时 body 整体上移（resizeToAvoidBottomInset），
+    // 输入框与「下一步/保存」操作栏始终可见。
+    final editing = widget.editWalnut != null;
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, _) {
+        if (didPop) return;
+        _askExit();
+      },
+      child: Scaffold(
+        backgroundColor: Tokens.bg,
+        resizeToAvoidBottomInset: true,
+        appBar: AppBar(
+          backgroundColor: Tokens.bg,
+          elevation: 0,
+          leading: GestureDetector(
+              onTap: _askExit,
+              child: Icon(Icons.arrow_back, color: Tokens.text)),
+          title: Text(editing ? '编辑核桃' : '新增核桃',
+              style: TextStyle(
+                  color: Tokens.text,
+                  fontSize: Tokens.fsEmph,
+                  fontWeight: FontWeight.bold)),
         ),
-        const SizedBox(height: 10),
-        _actions(context),
-      ]),
+        body: SafeArea(
+          child: Column(children: [
+            Padding(
+                padding: const EdgeInsets.fromLTRB(16, 6, 16, 10),
+                child: _stepper()),
+            Expanded(
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+                child: _step == 1 ? _step1() : _step2(),
+              ),
+            ),
+            Padding(
+                padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
+                child: _actions(context)),
+          ]),
+        ),
+      ),
     );
+  }
+
+  /// 必填校验（CI 反馈 #8）：名称 / 购买渠道 / 购买价格 / 购买日期
+  List<String> _missing() {
+    final m = <String>[];
+    if (_name.text.trim().isEmpty) m.add('名称');
+    if (_channel.trim().isEmpty) m.add('购买渠道');
+    if (_price.text.trim().isEmpty) m.add('购买价格');
+    if (_buyDateCtl.text.trim().isEmpty) m.add('购买日期');
+    return m;
+  }
+
+  /// 右滑返回 / 点返回键：三选弹窗（保存并退出 / 不保存退出 / 继续编辑）
+  Future<void> _askExit() async {
+    final r = await showDialog<String>(
+      context: context,
+      builder: (d) => AlertDialog(
+        title: const Text('是否保存'),
+        content: const Text('这条记录还没保存，要保存后退出吗？'),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(d, 'save'),
+              child: const Text('保存并退出')),
+          TextButton(
+              onPressed: () => Navigator.pop(d, 'drop'),
+              child: const Text('不保存退出')),
+          TextButton(
+              onPressed: () => Navigator.pop(d, 'stay'),
+              child: const Text('继续编辑')),
+        ],
+      ),
+    );
+    if (r == null || r == 'stay') return;
+    if (r == 'save') {
+      final miss = _missing();
+      if (miss.isNotEmpty) {
+        _toast('请填写：${miss.join('、')}');
+        return; // 仍不填 → 留在页面，再右滑会再次提示
+      }
+      await _save(context);
+      return;
+    }
+    if (mounted) Navigator.pop(context);
   }
 
   Widget _stepper() => Row(children: [
         _stepDot(1, '基本信息'),
-        const Expanded(child: Divider(color: Tokens.faint)),
+        Expanded(child: Divider(color: Tokens.faint)),
         _stepDot(2, '尺寸 · 品相 · 图'),
       ]);
 
@@ -156,7 +222,7 @@ class _AddWalnutSheetState extends ConsumerState<AddWalnutSheet> {
         child: Padding(
           padding: const EdgeInsets.symmetric(vertical: 4),
           child: Row(children: [
-            const Text('大品类 → 品种',
+            Text('大品类 → 品种',
                 style: TextStyle(color: Tokens.muted, fontSize: Tokens.fsHint)),
             const Spacer(),
             Icon(_cascadeOpen ? Icons.expand_less : Icons.expand_more,
@@ -183,7 +249,7 @@ class _AddWalnutSheetState extends ConsumerState<AddWalnutSheet> {
         }).toList()),
         if (sub.isNotEmpty) ...[
           const SizedBox(height: 10),
-          const Text('选择品种',
+          Text('选择品种',
               style: TextStyle(color: Tokens.muted, fontSize: Tokens.fsHint)),
           const SizedBox(height: 6),
           Wrap(spacing: 8, runSpacing: 8, children: sub.map((v) => NeuChip(
@@ -198,14 +264,15 @@ class _AddWalnutSheetState extends ConsumerState<AddWalnutSheet> {
     ]);
   }
 
-  Widget _channelRow() => Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        const Text('入手平台', style: TextStyle(color: Tokens.muted, fontSize: Tokens.fsHint)),
-        const SizedBox(height: 8),
-        Wrap(spacing: 8, runSpacing: 8, children: channels.map((c) => NeuChip(label: c, active: _channel == c,
-            onTap: () => setState(() => _channel = c))).toList()),
-      ]);
+  /// 入手平台：下拉菜单（CI 反馈 #6 —— 原型是 select，之前被做成按钮，改回下拉）
+  Widget _channelRow() => NeuSelect(
+        label: '入手平台',
+        current: _channel,
+        options: channels,
+        onPick: (v) => setState(() => _channel = v),
+      );
 
-  Widget _step2() => SingleChildScrollView(child: Column(children: [
+  Widget _step2() => Column(children: [
         _sizeGrid(),
         const SizedBox(height: 12),
         _field('重量(g)', _weight, '0', isNum: true),
@@ -214,15 +281,31 @@ class _AddWalnutSheetState extends ConsumerState<AddWalnutSheet> {
         const SizedBox(height: 12),
         _coverPicker(),
         const SizedBox(height: 12),
-        _patinaPicker(),
-        const SizedBox(height: 12),
-        _field('走色记录日期', _patinaDateCtl, '如 2026-10-04，可改'),
+        // 走色只在「新增」时随件写入；编辑模式选了图也不会保存，
+        // 原来两个控件照常显示会让壹以为存上了 —— 这里改成显式引导。
+        if (widget.editWalnut == null) ...[
+          _patinaPicker(),
+          // 选完走色图必须能看到缩略图、能点开看大图（原来只有一行「已选 N 张」，
+          // 选错了既看不见也改不了）
+          if (_patina.isNotEmpty) ...[
+            const SizedBox(height: 10),
+            _patinaGrid(),
+          ],
+          const SizedBox(height: 12),
+          _field('走色记录日期', _patinaDateCtl, '如 2026-10-04，可改'),
+        ] else
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 4),
+            child: Text('走色照片请在详情页右上角「＋走色」添加',
+                style:
+                    TextStyle(color: Tokens.faint, fontSize: Tokens.fsHint)),
+          ),
         const SizedBox(height: 12),
         _field('备注', _remark, '选填'),
-      ]));
+      ]);
 
   Widget _sizeGrid() => Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-    const Text('六面尺寸(mm)', style: TextStyle(color: Tokens.muted, fontSize: Tokens.fsHint)),
+    Text('六面尺寸(mm)', style: TextStyle(color: Tokens.muted, fontSize: Tokens.fsHint)),
     const SizedBox(height: 8),
     Row(children: [Expanded(child: _field('左·边', _lBian, '0', isNum: true)), const SizedBox(width: 8), Expanded(child: _field('左·肚', _lDu, '0', isNum: true)), const SizedBox(width: 8), Expanded(child: _field('左·高', _lGao, '0', isNum: true))]),
     const SizedBox(height: 8),
@@ -236,7 +319,7 @@ class _AddWalnutSheetState extends ConsumerState<AddWalnutSheet> {
   ]));
 
   Widget _switch(String label, bool v, ValueChanged<bool> on) => Padding(padding: const EdgeInsets.symmetric(vertical: 4),
-      child: Row(children: [Text(label, style: const TextStyle(color: Tokens.text)), const Spacer(), NeuSwitch(value: v, onChanged: on)]));
+      child: Row(children: [Text(label, style: TextStyle(color: Tokens.text)), const Spacer(), NeuSwitch(value: v, onChanged: on)]));
 
   Widget _coverPicker() {
     final cur = _cover ?? _existingCover;
@@ -261,12 +344,12 @@ class _AddWalnutSheetState extends ConsumerState<AddWalnutSheet> {
             onTap: _pickCover,
             child: Text(
                 has ? '封面已选 ✓（点击左侧看大图 / 右侧更换）' : '选封面图',
-                style: const TextStyle(color: Tokens.text)),
+                style: TextStyle(color: Tokens.text)),
           ),
         ),
         GestureDetector(
           onTap: _pickCover,
-          child: const Icon(Icons.chevron_right, color: Tokens.muted, size: 20),
+          child: Icon(Icons.chevron_right, color: Tokens.muted, size: 20),
         ),
       ]),
     );
@@ -281,14 +364,48 @@ class _AddWalnutSheetState extends ConsumerState<AddWalnutSheet> {
         final xs = await pickImagesFromSheet(context, multiple: true);
         if (xs.isNotEmpty) setState(() => _patina.addAll(xs));
       }, child: NeumorphicBox(radius: Tokens.rCard, padding: const EdgeInsets.all(14), child: Row(children: [
-        const Icon(Icons.collections, color: Tokens.accent),
+        Icon(Icons.collections, color: Tokens.accent),
         const SizedBox(width: 10),
         Expanded(
           child: Text(_patina.isEmpty ? '添加走色记录图（可多张）' : '已选 ${_patina.length} 张走色图',
-              style: const TextStyle(color: Tokens.text)),
+              style: TextStyle(color: Tokens.text)),
         ),
-        const Icon(Icons.chevron_right, color: Tokens.muted, size: 20),
+        Icon(Icons.chevron_right, color: Tokens.muted, size: 20),
       ])));
+
+  /// 已选走色图缩略图：点开看大图，右上角 × 移除该张
+  Widget _patinaGrid() => Wrap(
+        spacing: 8,
+        runSpacing: 8,
+        children: [
+          for (int i = 0; i < _patina.length; i++)
+            Stack(children: [
+              GestureDetector(
+                onTap: () => _preview(_patina, i),
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(10),
+                  child: Image.file(File(_patina[i].path),
+                      width: 72, height: 72, fit: BoxFit.cover),
+                ),
+              ),
+              Positioned(
+                top: 2,
+                right: 2,
+                child: GestureDetector(
+                  onTap: () => setState(() => _patina.removeAt(i)),
+                  child: Container(
+                    padding: const EdgeInsets.all(3),
+                    decoration: BoxDecoration(
+                        color: Colors.black45,
+                        borderRadius: BorderRadius.circular(10)),
+                    child: const Icon(Icons.close,
+                        color: Colors.white, size: 14),
+                  ),
+                ),
+              ),
+            ]),
+        ],
+      );
 
   /// 已选图片缩略图；点按图片本身可看大图
   Widget _thumb(XFile? f, double size) {
@@ -298,7 +415,7 @@ class _AddWalnutSheetState extends ConsumerState<AddWalnutSheet> {
         radius: size / 3,
         width: size,
         height: size,
-        child: const Icon(Icons.image_outlined, color: Tokens.faint, size: 18),
+        child: Icon(Icons.image_outlined, color: Tokens.faint, size: 18),
       );
     }
     return GestureDetector(
@@ -321,7 +438,7 @@ class _AddWalnutSheetState extends ConsumerState<AddWalnutSheet> {
   }
 
   Widget _field(String label, TextEditingController c, String hint, {bool isNum = false}) => Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Text(label, style: const TextStyle(color: Tokens.muted, fontSize: Tokens.fsHint)),
+        Text(label, style: TextStyle(color: Tokens.muted, fontSize: Tokens.fsHint)),
         const SizedBox(height: 6),
         NeuTextField(hint: hint, controller: c, keyboardType: isNum ? TextInputType.number : null),
       ]);
@@ -336,18 +453,35 @@ class _AddWalnutSheetState extends ConsumerState<AddWalnutSheet> {
       ]);
 
   void _next() {
-    if (_name.text.trim().isEmpty) { _toast('请填写名称'); return; }
+    final miss = _missing();
+    if (miss.isNotEmpty) {
+      _toast('请填写：${miss.join('、')}');
+      return;
+    }
     setState(() => _step = 2);
   }
 
   Future<void> _save(BuildContext context) async {
-    if (_name.text.trim().isEmpty) {
-      _toast('请填写名称');
+    // 防重复提交：连点「保存」会插入两条一模一样的记录
+    if (_saving) return;
+    final miss = _missing();
+    if (miss.isNotEmpty) {
+      _toast('请填写：${miss.join('、')}');
       return;
     }
+    setState(() => _saving = true);
+    try {
+      await _doSave(context);
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
+  }
+
+  Future<void> _doSave(BuildContext context) async {
     final e = widget.editWalnut;
     final code = e?.code ??
-        CodeGen.format('核桃', _buyDateCtl.text, await WalnutDao.countSameDay(_buyDateCtl.text));
+        CodeGen.format('核桃', _buyDateCtl.text,
+            await WalnutDao.maxSeqSameDay(_buyDateCtl.text));
     final coverPath = e?.coverPath ?? '';
     final w = Walnut(
         id: e?.id,
@@ -380,6 +514,10 @@ class _AddWalnutSheetState extends ConsumerState<AddWalnutSheet> {
     }
     if (_cover != null && id != null) {
       final rel = await ImageStore.save('walnut', id, File(_cover!.path));
+      // 换了封面就把旧封面文件删掉（先存新的、再删旧的，避免新图失败白删）
+      if (e != null && e.coverPath.isNotEmpty && e.coverPath != rel) {
+        await ImageStore.deleteFile(e.coverPath);
+      }
       await WalnutDao.update(Walnut(
           id: id,
           code: code,

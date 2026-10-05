@@ -54,12 +54,14 @@ class _StatsBodyState extends State<_StatsBody> {
   // 类型顺序：核桃 + 其他四类（照原型 TYPES）
   static const List<String> _order = ['核桃', ...itemTypes];
 
+  // 朱砂 → 赭 → 宫阙青灰 → 淡金 → 米白（《瑞鹤图》色系，原来写死蓝灰，
+  // 切到瑞鹤图主题后图例仍是冷蓝，与整屏宣纸调子打架）
   static const List<Color> _shades = [
-    Color(0xFF51618A),
-    Color(0xFF6F7FAE),
-    Color(0xFF8A98C4),
-    Color(0xFFA6B3D6),
-    Color(0xFFC6CFE4),
+    Color(0xFFB5452F), // 朱砂
+    Color(0xFFC87A56), // 赭
+    Color(0xFF8FA3B7), // 宫阙青灰
+    Color(0xFFBFAF8F), // 淡金
+    Color(0xFFD8D2C2), // 米白
   ];
 
   @override
@@ -123,7 +125,7 @@ class _StatsBodyState extends State<_StatsBody> {
               Padding(
                 padding: const EdgeInsets.only(bottom: 12),
                 child: Text(title,
-                    style: const TextStyle(
+                    style: TextStyle(
                         fontSize: Tokens.fsBody,
                         fontWeight: FontWeight.w700,
                         color: Tokens.text)),
@@ -147,7 +149,7 @@ class _StatsBodyState extends State<_StatsBody> {
   Widget _kpiBox(String k, String v) => Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(k, style: const TextStyle(color: Tokens.muted, fontSize: Tokens.fsHint)),
+          Text(k, style: TextStyle(color: Tokens.muted, fontSize: Tokens.fsHint)),
           const SizedBox(height: 8),
           Text(v,
               style: TextStyle(
@@ -171,7 +173,7 @@ class _StatsBodyState extends State<_StatsBody> {
         children: [
           _legend([('购入件数', Tokens.accent), ('花费金额', Tokens.accentSoft)]),
           const SizedBox(height: 6),
-          const Text('购入件数',
+          Text('购入件数',
               style: TextStyle(color: Tokens.accent, fontWeight: FontWeight.w700, fontSize: Tokens.fsHint)),
           const SizedBox(height: 6),
           _Bars(
@@ -180,7 +182,7 @@ class _StatsBodyState extends State<_StatsBody> {
                 .toList(),
           ),
           const SizedBox(height: 14),
-          const Text('花费金额',
+          Text('花费金额',
               style: TextStyle(color: Tokens.accent, fontWeight: FontWeight.w700, fontSize: Tokens.fsHint)),
           const SizedBox(height: 6),
           _Line(
@@ -197,7 +199,7 @@ class _StatsBodyState extends State<_StatsBody> {
               ),
               padding: const EdgeInsets.all(10),
               child: Text('费用主要花在：${top3.join(' · ')}',
-                  style: const TextStyle(color: Tokens.text, fontSize: Tokens.fsHint, height: 1.7)),
+                  style: TextStyle(color: Tokens.text, fontSize: Tokens.fsHint, height: 1.7)),
             ),
         ],
       ),
@@ -209,7 +211,7 @@ class _StatsBodyState extends State<_StatsBody> {
           for (final (label, color) in items) ...[
             Container(width: 11, height: 11, decoration: BoxDecoration(color: color, borderRadius: BorderRadius.circular(3))),
             const SizedBox(width: 5),
-            Text(label, style: const TextStyle(color: Tokens.muted, fontSize: Tokens.fsLabel)),
+            Text(label, style: TextStyle(color: Tokens.muted, fontSize: Tokens.fsLabel)),
             const SizedBox(width: 16),
           ],
         ],
@@ -224,13 +226,13 @@ class _StatsBodyState extends State<_StatsBody> {
       Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text('A · 横向条形对照',
+          Text('A · 横向条形对照',
               style: TextStyle(color: Tokens.accent, fontWeight: FontWeight.w700, fontSize: Tokens.fsHint)),
           _legend([('数量', Tokens.accent), ('金额', Tokens.accentSoft)]),
           const SizedBox(height: 6),
           for (final r in byType) _hBar(r.type, r.count.toDouble(), r.amount, maxQ, maxA),
           const SizedBox(height: 14),
-          const Text('B · 环形（金额占比）+ 条形（数量）',
+          Text('B · 环形（金额占比）+ 条形（数量）',
               style: TextStyle(color: Tokens.accent, fontWeight: FontWeight.w700, fontSize: Tokens.fsHint)),
           const SizedBox(height: 8),
           Row(
@@ -246,9 +248,9 @@ class _StatsBodyState extends State<_StatsBody> {
                       Row(children: [
                         Container(width: 11, height: 11, decoration: BoxDecoration(color: _shades[i % _shades.length], borderRadius: BorderRadius.circular(3))),
                         const SizedBox(width: 6),
-                        Expanded(child: Text(byType[i].type, style: const TextStyle(color: Tokens.text, fontSize: Tokens.fsHint))),
+                        Expanded(child: Text(byType[i].type, style: TextStyle(color: Tokens.text, fontSize: Tokens.fsHint))),
                         Text('${totalAmount > 0 ? ((byType[i].amount / totalAmount) * 100).round() : 0}%',
-                            style: const TextStyle(color: Tokens.muted, fontSize: Tokens.fsHint)),
+                            style: TextStyle(color: Tokens.muted, fontSize: Tokens.fsHint)),
                       ]),
                       const SizedBox(height: 6),
                     ],
@@ -268,10 +270,10 @@ class _StatsBodyState extends State<_StatsBody> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Row(children: [
-              Text(label, style: const TextStyle(color: Tokens.text)),
+              Text(label, style: TextStyle(color: Tokens.text)),
               const Spacer(),
               Text('${q.round()}件 · ${formatPrice(a)}',
-                  style: const TextStyle(color: Tokens.muted, fontSize: Tokens.fsHint)),
+                  style: TextStyle(color: Tokens.muted, fontSize: Tokens.fsHint)),
             ]),
             const SizedBox(height: 6),
             ClipRRect(
@@ -319,9 +321,10 @@ class _StatsBodyState extends State<_StatsBody> {
         children: [
           Container(
             padding: const EdgeInsets.only(bottom: 6),
-            decoration: const BoxDecoration(
-                border: Border(bottom: BorderSide(color: Color(0xFFD2DAE6), width: 2))),
-            child: const Row(children: [
+            // 原来写死蓝灰色，切瑞鹤图主题后不跟随 → 改用主题令牌
+            decoration: BoxDecoration(
+                border: Border(bottom: BorderSide(color: Tokens.gold, width: 2))),
+            child: Row(children: [
               Expanded(flex: 2, child: Text('品类', style: TextStyle(color: Tokens.muted, fontWeight: FontWeight.w700))),
               Expanded(child: Text('件数', style: TextStyle(color: Tokens.muted, fontWeight: FontWeight.w700), textAlign: TextAlign.right)),
               Expanded(child: Text('金额', style: TextStyle(color: Tokens.muted, fontWeight: FontWeight.w700), textAlign: TextAlign.right)),
@@ -333,13 +336,13 @@ class _StatsBodyState extends State<_StatsBody> {
               onTap: () => setState(() => _sel = _sel == r.type ? '' : r.type),
               child: Container(
                 padding: const EdgeInsets.symmetric(vertical: 9),
-                decoration: const BoxDecoration(
-                    border: Border(bottom: BorderSide(color: Color(0xFFDCE3EC), width: 1))),
+                decoration: BoxDecoration(
+                    border: Border(bottom: BorderSide(color: Tokens.faint, width: 1))),
                 child: Row(children: [
-                  Expanded(flex: 2, child: Text(r.type, style: const TextStyle(color: Tokens.text))),
+                  Expanded(flex: 2, child: Text(r.type, style: TextStyle(color: Tokens.text))),
                   Expanded(child: Text('${r.count}', style: TextStyle(color: Tokens.text, fontFamily: Tokens.fontNum), textAlign: TextAlign.right)),
                   Expanded(child: Text(formatPrice(r.amount), style: TextStyle(color: Tokens.text, fontFamily: Tokens.fontNum), textAlign: TextAlign.right)),
-                  Expanded(child: Text('${totalA > 0 ? ((r.amount / totalA) * 100).round() : 0}%', style: const TextStyle(color: Tokens.muted), textAlign: TextAlign.right)),
+                  Expanded(child: Text('${totalA > 0 ? ((r.amount / totalA) * 100).round() : 0}%', style: TextStyle(color: Tokens.muted), textAlign: TextAlign.right)),
                 ]),
               ),
             ),
@@ -362,10 +365,10 @@ class _StatsBodyState extends State<_StatsBody> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text('${r.type} · 单项统计',
-                style: const TextStyle(color: Tokens.accent, fontWeight: FontWeight.w700, fontSize: Tokens.fsBody)),
+                style: TextStyle(color: Tokens.accent, fontWeight: FontWeight.w700, fontSize: Tokens.fsBody)),
             const SizedBox(height: 6),
             Text('购入 ${r.count} 件 · 花费 ${formatPrice(r.amount)} · 占总数 ${total > 0 ? ((r.count / total) * 100).round() : 0}% / 总金额 ${totalA > 0 ? ((r.amount / totalA) * 100).round() : 0}%',
-                style: const TextStyle(color: Tokens.text, fontSize: Tokens.fsHint, height: 1.6)),
+                style: TextStyle(color: Tokens.text, fontSize: Tokens.fsHint, height: 1.6)),
           ],
         ),
       );
@@ -390,7 +393,7 @@ class _StatAnchor extends StatelessWidget {
                   radius: Tokens.rPill,
                   padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                   child: Text(label,
-                      style: const TextStyle(
+                      style: TextStyle(
                           color: Tokens.muted,
                           fontSize: Tokens.fsHint,
                           fontWeight: FontWeight.w600)),
@@ -408,7 +411,7 @@ class _Bars extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (bars.isEmpty)
-      return const Text('暂无数据', style: TextStyle(color: Tokens.faint));
+      return Text('暂无数据', style: TextStyle(color: Tokens.faint));
     final maxV = bars.map((b) => b.$2).reduce((a, b) => a > b ? a : b);
     return LayoutBuilder(builder: (c, cons) {
       final w = cons.maxWidth;
@@ -426,7 +429,7 @@ class _Bars extends StatelessWidget {
                   mainAxisAlignment: MainAxisAlignment.end,
                   children: [
                     Text(value.round().toString(),
-                        style: const TextStyle(color: Tokens.muted, fontSize: Tokens.fsLabel)),
+                        style: TextStyle(color: Tokens.muted, fontSize: Tokens.fsLabel)),
                     const SizedBox(height: 4),
                     Container(
                         width: bw,
@@ -435,7 +438,7 @@ class _Bars extends StatelessWidget {
                             color: color, borderRadius: BorderRadius.circular(4))),
                     const SizedBox(height: 6),
                     Text(label,
-                        style: const TextStyle(color: Tokens.faint, fontSize: Tokens.fsLabel)),
+                        style: TextStyle(color: Tokens.faint, fontSize: Tokens.fsLabel)),
                   ],
                 ),
               ),
@@ -453,7 +456,7 @@ class _Line extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (pts.isEmpty)
-      return const Text('暂无数据', style: TextStyle(color: Tokens.faint));
+      return Text('暂无数据', style: TextStyle(color: Tokens.faint));
     final maxV = pts.map((p) => p.$2).reduce((a, b) => a > b ? a : b);
     return LayoutBuilder(builder: (c, cons) {
       final w = cons.maxWidth;
@@ -487,14 +490,14 @@ class _Line extends StatelessWidget {
               left: points[i].dx - 14,
               top: h - 16,
               child: Text(pts[i].$1,
-                  style: const TextStyle(color: Tokens.faint, fontSize: Tokens.fsLabel)),
+                  style: TextStyle(color: Tokens.faint, fontSize: Tokens.fsLabel)),
             ),
           for (var i = 0; i < n; i++)
             Positioned(
               left: points[i].dx - 12,
               top: math.max(0, points[i].dy - 18),
               child: Text(pts[i].$2.round().toString(),
-                  style: const TextStyle(color: Tokens.muted, fontSize: Tokens.fsLabel)),
+                  style: TextStyle(color: Tokens.muted, fontSize: Tokens.fsLabel)),
             ),
         ]),
       );
@@ -537,7 +540,7 @@ class _Donut extends StatelessWidget {
           size: const Size(120, 120),
           painter: _DonutPainter(segs, total),
         ),
-        const Center(
+        Center(
           child: Text('金额\n占比',
               textAlign: TextAlign.center,
               style: TextStyle(color: Tokens.muted, fontSize: Tokens.fsLabel, height: 1.3)),

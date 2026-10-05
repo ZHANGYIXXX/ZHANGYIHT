@@ -12,7 +12,9 @@ import '../../data/daos/item_dao.dart';
 import '../../data/image_store.dart';
 import '../../widgets/image_pick_sheet.dart';
 import '../../widgets/image_viewer.dart';
+import '../../widgets/neu_select.dart';
 
+/// 新增/编辑其他类：全屏页面（CI 反馈 #1 —— 半屏时手机打字看不到填写内容）
 class AddItemSheet extends ConsumerStatefulWidget {
   /// 编辑模式：传入即预填，保存时 update；为空则是新增
   final Item? editItem;
@@ -38,6 +40,7 @@ class _AddItemSheetState extends ConsumerState<AddItemSheet> {
   String _channel = channels.first;
   XFile? _cover; // 本次新选封面
   XFile? _existingCover; // 编辑时已有的封面（解析为文件）
+  bool _saving = false;
   bool _varietyIsFree = false;
   String? _openCascade; // 当前展开的级联下拉标题（null = 全收起）
 
@@ -52,6 +55,8 @@ class _AddItemSheetState extends ConsumerState<AddItemSheet> {
     final e = widget.editItem;
     if (e != null) {
       _type = e.type;
+      // 升级前录入的记录没有名称，用类型名兜底，避免一进编辑就被必填卡住
+      _name.text = e.name.isNotEmpty ? e.name : e.type;
       _category =
           e.category.isNotEmpty ? e.category : itemCategoryVariety.keys.first;
       _variety = e.variety;
@@ -97,32 +102,100 @@ class _AddItemSheetState extends ConsumerState<AddItemSheet> {
 
   @override
   Widget build(BuildContext context) {
-    final mq = MediaQuery.of(context);
-    // 可用高度 = 屏高 - 键盘；底部再留系统导航栏，确保操作栏不被遮挡/溢出
-    final avail = mq.size.height - mq.viewInsets.bottom;
-    final bottomPad = mq.viewInsets.bottom + mq.padding.bottom;
-    return Container(
-      constraints: BoxConstraints(maxHeight: avail * 0.92),
-      decoration: const BoxDecoration(
-          color: Tokens.bg,
-          borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
-      padding:
-          EdgeInsets.only(bottom: bottomPad, left: 16, right: 16, top: 12),
-      child: Column(mainAxisSize: MainAxisSize.min, children: [
-        _stepper(),
-        const SizedBox(height: 10),
-        Flexible(
-            child: SingleChildScrollView(
-                child: _step == 1 ? _step1() : _step2())),
-        const SizedBox(height: 10),
-        _actions(context),
-      ]),
+    // 全屏页面：键盘弹起时 body 整体上移，输入框与操作栏始终可见
+    final editing = widget.editItem != null;
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, _) {
+        if (didPop) return;
+        _askExit();
+      },
+      child: Scaffold(
+        backgroundColor: Tokens.bg,
+        resizeToAvoidBottomInset: true,
+        appBar: AppBar(
+          backgroundColor: Tokens.bg,
+          elevation: 0,
+          leading: GestureDetector(
+              onTap: _askExit,
+              child: Icon(Icons.arrow_back, color: Tokens.text)),
+          title: Text(editing ? '编辑${_typeLabel()}' : '新增${_typeLabel()}',
+              style: TextStyle(
+                  color: Tokens.text,
+                  fontSize: Tokens.fsEmph,
+                  fontWeight: FontWeight.bold)),
+        ),
+        body: SafeArea(
+          child: Column(children: [
+            Padding(
+                padding: const EdgeInsets.fromLTRB(16, 6, 16, 10),
+                child: _stepper()),
+            Expanded(
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+                child: _step == 1 ? _step1() : _step2(),
+              ),
+            ),
+            Padding(
+                padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
+                child: _actions(context)),
+          ]),
+        ),
+      ),
     );
   }
 
+  String _typeLabel() => _type;
+
+  /// 必填校验（CI 反馈 #8）：名称 / 购买渠道 / 购买价格 / 购买日期
+  List<String> _missing() {
+    final m = <String>[];
+    if (_name.text.trim().isEmpty) m.add('名称');
+    if (_channel.trim().isEmpty) m.add('购买渠道');
+    if (_price.text.trim().isEmpty) m.add('购买价格');
+    if (_buyDateCtl.text.trim().isEmpty) m.add('购买日期');
+    return m;
+  }
+
+  /// 右滑返回 / 点返回键：三选弹窗（保存并退出 / 不保存退出 / 继续编辑）
+  Future<void> _askExit() async {
+    final r = await showDialog<String>(
+      context: context,
+      builder: (d) => AlertDialog(
+        title: const Text('是否保存'),
+        content: const Text('这条记录还没保存，要保存后退出吗？'),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(d, 'save'),
+              child: const Text('保存并退出')),
+          TextButton(
+              onPressed: () => Navigator.pop(d, 'drop'),
+              child: const Text('不保存退出')),
+          TextButton(
+              onPressed: () => Navigator.pop(d, 'stay'),
+              child: const Text('继续编辑')),
+        ],
+      ),
+    );
+    if (r == null || r == 'stay') return;
+    if (r == 'save') {
+      final miss = _missing();
+      if (miss.isNotEmpty) {
+        _toast('请填写：${miss.join('、')}');
+        return;
+      }
+      await _save(context);
+      return;
+    }
+    if (mounted) Navigator.pop(context);
+  }
+
+  void _toast(String m) =>
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(m)));
+
   Widget _stepper() => Row(children: [
         _dot(1, '类型 · 材质'),
-        const Expanded(child: Divider(color: Tokens.faint)),
+        Expanded(child: Divider(color: Tokens.faint)),
         _dot(2, '尺寸 · 图'),
       ]);
   Widget _dot(int n, String label) => Row(children: [
@@ -150,9 +223,9 @@ class _AddItemSheetState extends ConsumerState<AddItemSheet> {
         _varietyRow(),
         const SizedBox(height: 12),
         Row(children: [
-          Expanded(child: _field('名称/俗称', _name, '选填')),
+          Expanded(child: _field('名称', _name, '必填')),
           const SizedBox(width: 12),
-          Expanded(child: _field('价格(元)', _price, '0', isNum: true))
+          Expanded(child: _field('价格(元)', _price, '必填', isNum: true))
         ]),
         const SizedBox(height: 12),
         Row(children: [
@@ -160,12 +233,15 @@ class _AddItemSheetState extends ConsumerState<AddItemSheet> {
           const SizedBox(width: 12),
           Expanded(child: _channelRow())
         ]),
+        const SizedBox(height: 12),
+        // 核桃页有商家、其他类一直缺，商家字段永远存不进去 → 补齐
+        _field('商家', _merchant, '选填'),
       ]);
 
   Widget _typeRow() => Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text('类型',
+          Text('类型',
               style: TextStyle(color: Tokens.muted, fontSize: Tokens.fsHint)),
           const SizedBox(height: 8),
           Wrap(
@@ -185,7 +261,7 @@ class _AddItemSheetState extends ConsumerState<AddItemSheet> {
   Widget _materialRow() => Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text('材质',
+          Text('材质',
               style: TextStyle(color: Tokens.muted, fontSize: Tokens.fsHint)),
           const SizedBox(height: 8),
           _cascade(
@@ -204,7 +280,7 @@ class _AddItemSheetState extends ConsumerState<AddItemSheet> {
   Widget _varietyRow() {
     if (_varietyIsFree) {
       return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        const Text('品种（手动输入）',
+        Text('品种（手动输入）',
             style: TextStyle(color: Tokens.muted, fontSize: Tokens.fsHint)),
         const SizedBox(height: 6),
         NeuTextField(hint: '如：崖柏', controller: _varietyFree),
@@ -212,7 +288,7 @@ class _AddItemSheetState extends ConsumerState<AddItemSheet> {
     }
     final list = itemCategoryVariety[_category] ?? const <String>[];
     return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-      const Text('品种',
+      Text('品种',
           style: TextStyle(color: Tokens.muted, fontSize: Tokens.fsHint)),
       const SizedBox(height: 8),
       _cascade(
@@ -240,7 +316,7 @@ class _AddItemSheetState extends ConsumerState<AddItemSheet> {
           child: Row(children: [
             Expanded(
                 child: Text(label,
-                    style: const TextStyle(
+                    style: TextStyle(
                         fontSize: Tokens.fsBody, color: Tokens.text))),
             Icon(open ? Icons.arrow_drop_up : Icons.arrow_drop_down,
                 size: 18, color: Tokens.muted),
@@ -271,44 +347,31 @@ class _AddItemSheetState extends ConsumerState<AddItemSheet> {
     ]);
   }
 
-  Widget _channelRow() => Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Text('入手平台',
-              style: TextStyle(color: Tokens.muted, fontSize: Tokens.fsHint)),
-          const SizedBox(height: 8),
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            children: channels
-                .map((c) => NeuChip(
-                    label: c,
-                    active: _channel == c,
-                    onTap: () => setState(() => _channel = c)))
-                .toList(),
-          ),
-        ],
+  /// 入手平台：下拉菜单（CI 反馈 #6 —— 原型是 select，之前被做成按钮，改回下拉）
+  Widget _channelRow() => NeuSelect(
+        label: '入手平台',
+        current: _channel,
+        options: channels,
+        onPick: (v) => setState(() => _channel = v),
       );
 
-  Widget _step2() => SingleChildScrollView(
-        child: Column(children: [
-          _field('尺寸(mm)', _size, '如 12.0', isNum: true),
-          if (_type == '手串') const SizedBox(height: 12),
-          if (_type == '手串') _field('串型', _strand, '如：108 颗'),
-          const SizedBox(height: 12),
-          _field('重量(g)', _weight, '0', isNum: true),
-          const SizedBox(height: 12),
-          _coverPicker(),
-          const SizedBox(height: 12),
-          _field('备注', _remark, '选填'),
-        ]),
-      );
+  Widget _step2() => Column(children: [
+        _field('尺寸(mm)', _size, '如 12.0', isNum: true),
+        if (_type == '手串') const SizedBox(height: 12),
+        if (_type == '手串') _field('串型', _strand, '如：108 颗'),
+        const SizedBox(height: 12),
+        _field('重量(g)', _weight, '0', isNum: true),
+        const SizedBox(height: 12),
+        _coverPicker(),
+        const SizedBox(height: 12),
+        _field('备注', _remark, '选填'),
+      ]);
 
   Widget _field(String label, TextEditingController c, String hint,
           {bool isNum = false}) =>
       Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         Text(label,
-            style: const TextStyle(color: Tokens.muted, fontSize: Tokens.fsHint)),
+            style: TextStyle(color: Tokens.muted, fontSize: Tokens.fsHint)),
         const SizedBox(height: 6),
         NeuTextField(
             hint: hint,
@@ -343,12 +406,12 @@ class _AddItemSheetState extends ConsumerState<AddItemSheet> {
             onTap: _pickCover,
             child: Text(
                 has ? '封面已选 ✓（点击左侧看大图 / 右侧更换）' : '选封面图',
-                style: const TextStyle(color: Tokens.text)),
+                style: TextStyle(color: Tokens.text)),
           ),
         ),
         GestureDetector(
           onTap: _pickCover,
-          child: const Icon(Icons.chevron_right, color: Tokens.muted, size: 20),
+          child: Icon(Icons.chevron_right, color: Tokens.muted, size: 20),
         ),
       ]),
     );
@@ -367,7 +430,7 @@ class _AddItemSheetState extends ConsumerState<AddItemSheet> {
         radius: size / 3,
         width: size,
         height: size,
-        child: const Icon(Icons.image_outlined, color: Tokens.faint, size: 18),
+        child: Icon(Icons.image_outlined, color: Tokens.faint, size: 18),
       );
     }
     return GestureDetector(
@@ -402,9 +465,32 @@ class _AddItemSheetState extends ConsumerState<AddItemSheet> {
                 onTap: () => _step == 1 ? _next() : _save(context))),
       ]);
 
-  void _next() => setState(() => _step = 2);
+  void _next() {
+    final miss = _missing();
+    if (miss.isNotEmpty) {
+      _toast('请填写：${miss.join('、')}');
+      return;
+    }
+    setState(() => _step = 2);
+  }
 
   Future<void> _save(BuildContext context) async {
+    // 防重复提交：连点「保存」会插入两条一模一样的记录
+    if (_saving) return;
+    final miss = _missing();
+    if (miss.isNotEmpty) {
+      _toast('请填写：${miss.join('、')}');
+      return;
+    }
+    setState(() => _saving = true);
+    try {
+      await _doSave(context);
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
+  }
+
+  Future<void> _doSave(BuildContext context) async {
     final e = widget.editItem;
     final variety =
         _varietyIsFree ? _varietyFree.text.trim() : _variety;
@@ -412,6 +498,7 @@ class _AddItemSheetState extends ConsumerState<AddItemSheet> {
     final it = Item(
       id: e?.id,
       type: _type,
+      name: _name.text.trim(), // 之前漏了这一行：名称只校验不入库
       code: e?.code ?? '',
       category: _category,
       variety: variety,
@@ -427,15 +514,20 @@ class _AddItemSheetState extends ConsumerState<AddItemSheet> {
     );
 
     int? id;
+    // code 必须提到分支外：新增时 it.code 是 ''，若后面回写封面仍用 it.code
+    // 会把刚生成的编号覆盖成空串。
+    late final String code;
     if (e != null) {
       await ItemDao.update(it);
       id = e.id;
+      code = e.code;
     } else {
-      final count = await ItemDao.countSameDay(_type, _buyDateCtl.text);
-      final code = CodeGen.format(_type, _buyDateCtl.text, count);
+      final seq = await ItemDao.maxSeqSameDay(_type, _buyDateCtl.text);
+      code = CodeGen.format(_type, _buyDateCtl.text, seq);
       id = await ItemDao.insert(
           Item(
             type: it.type,
+            name: it.name,
             code: code,
             category: it.category,
             variety: it.variety,
@@ -454,10 +546,15 @@ class _AddItemSheetState extends ConsumerState<AddItemSheet> {
     // 新选封面则保存并回写
     if (_cover != null && id != null) {
       final rel = await ImageStore.save('item', id, File(_cover!.path));
+      // 换了封面就清理旧封面文件
+      if (e != null && e.coverPath.isNotEmpty && e.coverPath != rel) {
+        await ImageStore.deleteFile(e.coverPath);
+      }
       await ItemDao.update(Item(
         id: id,
         type: it.type,
-        code: it.code,
+        name: it.name,
+        code: code,
         category: it.category,
         variety: it.variety,
         sizeMm: it.sizeMm,

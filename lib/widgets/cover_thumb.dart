@@ -40,7 +40,7 @@ class CoverThumb extends StatelessWidget {
           borderRadius: BorderRadius.circular(12),
           boxShadow: Tokens.inSm,
         ),
-        child: const Icon(Icons.image_outlined,
+        child: Icon(Icons.image_outlined,
             color: Tokens.faint, size: 22),
       );
 }

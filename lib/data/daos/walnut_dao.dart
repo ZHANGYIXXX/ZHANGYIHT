@@ -1,5 +1,6 @@
 import 'package:sqflite/sqflite.dart';
 import '../database.dart';
+import '../../logic/codegen.dart';
 import '../models/walnut.dart';
 
 class WalnutDao {
@@ -30,11 +31,11 @@ class WalnutDao {
     return rows.isEmpty ? null : Walnut.fromMap(rows.first);
   }
 
-  // 同「购买日期」已存在的核桃条数（用于编号重名序）
-  static Future<int> countSameDay(String buyDate) async {
+  // 同「购买日期」已用过的最大编号序号（删中间记录后新增也不会撞号）
+  static Future<int> maxSeqSameDay(String buyDate) async {
     final db = await AppDatabase.instance;
-    final c = await db.rawQuery(
-        'SELECT COUNT(*) AS n FROM walnut WHERE buy_date = ?', [buyDate]);
-    return (c.first['n'] as int);
+    final rows = await db.query('walnut',
+        columns: ['code'], where: 'buy_date = ?', whereArgs: [buyDate]);
+    return CodeGen.maxSeq(rows.map((r) => (r['code'] as String?) ?? ''));
   }
 }

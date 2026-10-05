@@ -20,7 +20,18 @@ class AppDatabase {
     final path = p.join(dbDir.path, 'app.db');
     return openDatabase(
       path,
-      version: 1,
+      // v2：补 item.name —— 其他类此前只有输入框没有列，填了的名称会丢
+      version: 2,
+      // SQLite 默认关闭外键约束，不打开的话 patina 表的 ON DELETE CASCADE
+      // 根本不生效，删核桃会留下孤儿走色记录。
+      onConfigure: (db) async => db.execute('PRAGMA foreign_keys = ON'),
+      // 已装机的旧库必须能平滑升级，否则打开就崩 / 数据读不出来
+      onUpgrade: (db, oldVersion, newVersion) async {
+        if (oldVersion < 2) {
+          await db.execute(
+              "ALTER TABLE item ADD COLUMN name TEXT NOT NULL DEFAULT ''");
+        }
+      },
       onCreate: (db, version) async {
         await db.execute('''
           CREATE TABLE walnut (
@@ -46,7 +57,7 @@ class AppDatabase {
         await db.execute('''
           CREATE TABLE item (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
-            type TEXT, code TEXT, category TEXT, variety TEXT,
+            type TEXT, name TEXT, code TEXT, category TEXT, variety TEXT,
             size_mm REAL, strand_type TEXT, weight REAL,
             buy_date TEXT, channel TEXT, merchant TEXT,
             price REAL, cover_path TEXT, remark TEXT

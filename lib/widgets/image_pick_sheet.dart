@@ -57,7 +57,7 @@ Widget _sheetTitle(BuildContext ctx, String t) => Padding(
       child: Align(
         alignment: Alignment.centerLeft,
         child: Text(t,
-            style: const TextStyle(
+            style: TextStyle(
                 color: Tokens.text,
                 fontSize: Tokens.fsEmph,
                 fontWeight: FontWeight.bold)),
@@ -67,7 +67,7 @@ Widget _sheetTitle(BuildContext ctx, String t) => Padding(
 Widget _sheetItem(BuildContext ctx, IconData icon, String label, VoidCallback onTap) =>
     ListTile(
       leading: Icon(icon, color: Tokens.accent),
-      title: Text(label, style: const TextStyle(color: Tokens.text)),
+      title: Text(label, style: TextStyle(color: Tokens.text)),
       onTap: onTap,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
     );

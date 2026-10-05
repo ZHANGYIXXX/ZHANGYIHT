@@ -14,7 +14,8 @@ class NeumorphicBox extends StatelessWidget {
   final NeuState state;
   final double? width;
   final double? height;
-  final Color color;
+  // 可空：不传时取当前主题的 Tokens.bg，保证切主题后底色跟随
+  final Color? color;
 
   const NeumorphicBox({
     super.key,
@@ -24,7 +25,7 @@ class NeumorphicBox extends StatelessWidget {
     this.state = NeuState.raised,
     this.width,
     this.height,
-    this.color = Tokens.bg,
+    this.color,
   });
 
   @override
@@ -40,7 +41,7 @@ class NeumorphicBox extends StatelessWidget {
         height: height,
         padding: padding,
         decoration: BoxDecoration(
-          color: color,
+          color: color ?? Tokens.bg,
           borderRadius: BorderRadius.circular(radius),
           boxShadow: shadows,
         ),
@@ -90,7 +91,7 @@ class _NeuButtonState extends State<NeuButton> {
             padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
             child: Text(
               widget.label,
-              style: const TextStyle(
+              style: TextStyle(
                   fontSize: Tokens.fsBody,
                   color: Tokens.accent,
                   fontWeight: FontWeight.w600),
@@ -102,29 +103,87 @@ class _NeuButtonState extends State<NeuButton> {
   }
 }
 
-// 新拟态输入框：常驻凹陷
-class NeuTextField extends StatelessWidget {
+// 新拟态输入框：常驻凹陷；聚焦时描朱砂边 + 自动滚到键盘上方 + 回车跳下一栏
+class NeuTextField extends StatefulWidget {
   final String hint;
   final TextEditingController? controller;
   final TextInputType? keyboardType;
-  const NeuTextField(
-      {super.key, required this.hint, this.controller, this.keyboardType});
+  final TextInputAction? textInputAction;
+  const NeuTextField({
+    super.key,
+    required this.hint,
+    this.controller,
+    this.keyboardType,
+    this.textInputAction,
+  });
+
+  @override
+  State<NeuTextField> createState() => _NeuTextFieldState();
+}
+
+class _NeuTextFieldState extends State<NeuTextField> {
+  final FocusNode _focus = FocusNode();
+
+  @override
+  void initState() {
+    super.initState();
+    _focus.addListener(() {
+      if (!mounted) return;
+      setState(() {}); // 刷新聚焦描边
+      if (!_focus.hasFocus) return;
+      // 键盘弹出需要时间，延迟到键盘就位后再把当前字段滚到键盘上方。
+      // 没有这一步：折叠屏上键盘占近半屏，正在编辑的内容会被键盘盖住一半。
+      Future.delayed(const Duration(milliseconds: 350), () {
+        if (!mounted || !context.mounted) return;
+        Scrollable.ensureVisible(context,
+            duration: const Duration(milliseconds: 250),
+            alignment: 0.15,
+            alignmentPolicy: ScrollPositionAlignmentPolicy.explicit);
+      });
+    });
+  }
+
+  @override
+  void dispose() {
+    _focus.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
-    return NeumorphicBox(
-      state: NeuState.inset,
-      radius: Tokens.rInput,
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
-      child: TextField(
-        controller: controller,
-        keyboardType: keyboardType,
-        decoration: InputDecoration(
-          hintText: hint,
-          hintStyle: const TextStyle(color: Tokens.faint, fontSize: Tokens.fsBody),
-          border: InputBorder.none,
+    final focused = _focus.hasFocus;
+    return Container(
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(Tokens.rInput),
+        border: Border.all(
+          color: focused ? Tokens.seal : Colors.transparent,
+          width: focused ? 2 : 0,
         ),
-        style: const TextStyle(color: Tokens.text, fontSize: Tokens.fsBody),
+      ),
+      child: NeumorphicBox(
+        state: NeuState.inset,
+        radius: Tokens.rInput,
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+        child: TextField(
+          controller: widget.controller,
+          keyboardType: widget.keyboardType,
+          focusNode: _focus,
+          textInputAction: widget.textInputAction ?? TextInputAction.next,
+          // 回车 = 跳下一栏（最后一栏无下一项则原地不动），不再先收键盘
+          onSubmitted: (_) => FocusScope.of(context).nextFocus(),
+          decoration: InputDecoration(
+            hintText: widget.hint,
+            hintStyle:
+                TextStyle(color: Tokens.faint, fontSize: Tokens.fsBody),
+            border: InputBorder.none,
+            isCollapsed: true,
+            contentPadding: const EdgeInsets.symmetric(vertical: 10),
+          ),
+          style: TextStyle(
+              color: Tokens.text,
+              fontSize: Tokens.fsInput,
+              height: 1.1),
+        ),
       ),
     );
   }

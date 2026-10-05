@@ -7,7 +7,7 @@ class SwipeAction {
   final String label;
   final VoidCallback onTap;
   final Color color;
-  const SwipeAction(
+  SwipeAction(
       {required this.icon,
       required this.label,
       required this.onTap,
@@ -38,16 +38,22 @@ class _SwipeRevealState extends State<SwipeReveal>
   late final AnimationController _c = AnimationController(
       vsync: this, duration: const Duration(milliseconds: 220));
   double _dragX = 0;
+  // 上一次动画的 listener。原来每次 _animateTo 都 addListener 却从不移除，
+  // 滑几次后多个 listener 各自用不同的 begin 同时 setState → 回弹抖动。
+  VoidCallback? _listener;
 
   double get _actionWidth => 64.0 * widget.actions.length;
 
   void _animateTo(double target) {
     _c.stop();
+    if (_listener != null) _c.removeListener(_listener!);
     final begin = _dragX;
     _c.reset();
-    _c.addListener(() {
+    final l = () {
       setState(() => _dragX = begin + (target - begin) * _c.value);
-    });
+    };
+    _listener = l;
+    _c.addListener(l);
     _c.forward();
   }
 
@@ -55,6 +61,7 @@ class _SwipeRevealState extends State<SwipeReveal>
 
   @override
   void dispose() {
+    if (_listener != null) _c.removeListener(_listener!);
     _c.dispose();
     super.dispose();
   }

@@ -2,6 +2,7 @@
 class Item {
   final int? id;
   final String type; // 手串/吊坠/手把件/摆件
+  final String name; // 名称（V1.1 补：原来只画了输入框，根本没落库）
   final String code;
   final String category; // 材质（品类）
   final String variety; // 品种
@@ -18,6 +19,7 @@ class Item {
   Item({
     this.id,
     required this.type,
+    this.name = '',
     required this.code,
     required this.category,
     required this.variety,
@@ -35,6 +37,7 @@ class Item {
   factory Item.fromMap(Map<String, dynamic> m) => Item(
         id: m['id'] as int?,
         type: m['type'] as String,
+        name: (m['name'] as String?) ?? '', // 兼容升级前的旧行
         code: m['code'] as String,
         category: m['category'] as String,
         variety: m['variety'] as String,
@@ -52,6 +55,7 @@ class Item {
   Map<String, dynamic> toMap() => {
         if (id != null) 'id': id,
         'type': type,
+        'name': name,
         'code': code,
         'category': category,
         'variety': variety,

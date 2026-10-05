@@ -1,5 +1,6 @@
 import 'package:sqflite/sqflite.dart';
 import '../database.dart';
+import '../../logic/codegen.dart';
 import '../models/item.dart';
 
 class ItemDao {
@@ -31,12 +32,13 @@ class ItemDao {
     return rows.map(Item.fromMap).toList();
   }
 
-  // 同「类型 + 购买日期」已存在的条数（用于编号重名序）
-  static Future<int> countSameDay(String type, String buyDate) async {
+  // 同「类型 + 购买日期」已用过的最大编号序号（删中间记录后新增也不会撞号）
+  static Future<int> maxSeqSameDay(String type, String buyDate) async {
     final db = await AppDatabase.instance;
-    final c = await db.rawQuery(
-        'SELECT COUNT(*) AS n FROM item WHERE type = ? AND buy_date = ?',
-        [type, buyDate]);
-    return (c.first['n'] as int);
+    final rows = await db.query('item',
+        columns: ['code'],
+        where: 'type = ? AND buy_date = ?',
+        whereArgs: [type, buyDate]);
+    return CodeGen.maxSeq(rows.map((r) => (r['code'] as String?) ?? ''));
   }
 }

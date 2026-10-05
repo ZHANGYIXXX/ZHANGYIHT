@@ -19,4 +19,12 @@ class PatinaDao {
     final db = await AppDatabase.instance;
     return db.delete('patina', where: 'id = ?', whereArgs: [id]);
   }
+
+  /// 删某件核桃的全部走色记录。
+  /// 建表时虽写了 ON DELETE CASCADE，但 SQLite 默认 foreign_keys=OFF，
+  /// 级联不会生效，必须显式删，否则留下孤儿行。
+  static Future<int> deleteByWalnut(int walnutId) async {
+    final db = await AppDatabase.instance;
+    return db.delete('patina', where: 'walnut_id = ?', whereArgs: [walnutId]);
+  }
 }

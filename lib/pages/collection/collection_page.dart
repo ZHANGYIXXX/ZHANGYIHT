@@ -4,11 +4,10 @@ import '../../theme/tokens.dart';
 import '../../theme/nu.dart';
 import '../../logic/providers.dart';
 import '../../logic/format.dart';
+import '../../logic/delete_helper.dart';
 import '../../data/models/enums.dart';
 import '../../data/models/walnut.dart';
 import '../../data/models/item.dart';
-import '../../data/daos/walnut_dao.dart';
-import '../../data/daos/item_dao.dart';
 import '../../widgets/cover_thumb.dart';
 import '../../widgets/swipe_reveal.dart';
 import 'walnut_detail_page.dart';
@@ -76,7 +75,7 @@ class CollectionPage extends ConsumerWidget {
             flex: 1,
             child: SizedBox(), // 左占位，保证标题真正居中
           ),
-          const Text('文玩档案',
+          Text('文玩档案',
               style: TextStyle(
                   fontSize: Tokens.fsEmph,
                   fontWeight: FontWeight.bold,
@@ -92,7 +91,7 @@ class CollectionPage extends ConsumerWidget {
                   radius: Tokens.rBtn,
                   padding:
                       const EdgeInsets.symmetric(horizontal: 15, vertical: 9),
-                  child: const Text('＋新增',
+                  child: Text('＋新增',
                       style: TextStyle(
                           fontSize: Tokens.fsBody,
                           fontWeight: FontWeight.w700,
@@ -143,7 +142,7 @@ class CollectionPage extends ConsumerWidget {
               state: NeuState.raised,
               radius: Tokens.rBtn,
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 9),
-              child: const Text('‹ 返回',
+              child: Text('‹ 返回',
                   style: TextStyle(
                       fontSize: Tokens.fsBody,
                       fontWeight: FontWeight.w600,
@@ -198,11 +197,11 @@ class CollectionPage extends ConsumerWidget {
         TextSpan(children: [
           TextSpan(
               text: '文玩档案 › ',
-              style: const TextStyle(
+              style: TextStyle(
                   fontSize: Tokens.fsHint, color: Tokens.faint)),
           TextSpan(
               text: seg3.isEmpty ? head : '$head › $seg3',
-              style: const TextStyle(
+              style: TextStyle(
                   fontSize: Tokens.fsHint,
                   color: Tokens.muted,
                   fontWeight: FontWeight.w600)),
@@ -280,10 +279,10 @@ class CollectionPage extends ConsumerWidget {
             Expanded(
               child: Text(current,
                   overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
+                  style: TextStyle(
                       fontSize: Tokens.fsBody, color: Tokens.text)),
             ),
-            const Icon(Icons.arrow_drop_down, size: 18, color: Tokens.muted),
+            Icon(Icons.arrow_drop_down, size: 18, color: Tokens.muted),
           ],
         ),
       ),
@@ -297,9 +296,9 @@ class CollectionPage extends ConsumerWidget {
         child: Row(children: [
           Expanded(
               child: Text(label,
-                  style: const TextStyle(
+                  style: TextStyle(
                       fontSize: Tokens.fsBody, color: Tokens.faint))),
-          const Icon(Icons.arrow_drop_down, size: 18, color: Tokens.faint),
+          Icon(Icons.arrow_drop_down, size: 18, color: Tokens.faint),
         ]),
       );
 
@@ -311,7 +310,7 @@ class CollectionPage extends ConsumerWidget {
       builder: (c) => Container(
         constraints:
             BoxConstraints(maxHeight: MediaQuery.of(c).size.height * 0.6),
-        decoration: const BoxDecoration(
+        decoration: BoxDecoration(
             color: Tokens.bg,
             borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
         padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
@@ -342,7 +341,7 @@ class CollectionPage extends ConsumerWidget {
                                     : FontWeight.normal)),
                       ),
                       if (o == current)
-                        const Icon(Icons.check,
+                        Icon(Icons.check,
                             size: 18, color: Tokens.accent),
                     ]),
                   ),
@@ -363,7 +362,7 @@ class CollectionPage extends ConsumerWidget {
       return Center(
         child: Text('这里还空空如也\n点击右上角「＋新增」添加第一件',
             textAlign: TextAlign.center,
-            style: const TextStyle(
+            style: TextStyle(
                 color: Tokens.muted, fontSize: Tokens.fsHint)),
       );
     }
@@ -411,9 +410,11 @@ class CollectionPage extends ConsumerWidget {
         SwipeAction(icon: Icons.delete_outline, label: '删除', color: Tokens.badD10,
             onTap: () => _confirmDelete(ctx, ref, isWalnut: true, id: w.id, name: w.name)),
       ],
-      child: NeumorphicBox(
+      child: Stack(children: [
+            NeumorphicBox(
             radius: Tokens.rCard,
-            padding: const EdgeInsets.all(14),
+            // 右侧留 34 给右上角的 ✎ 编辑按钮，避免压住名称/价格
+            padding: const EdgeInsets.fromLTRB(14, 14, 34, 14),
             child: Row(
               children: [
                 CoverThumb(rel: w.coverPath, size: 60),
@@ -422,15 +423,15 @@ class CollectionPage extends ConsumerWidget {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(w.name, style: const TextStyle(fontSize: Tokens.fsBody, fontWeight: FontWeight.w600, color: Tokens.text)),
+                      Text(w.name, style: TextStyle(fontSize: Tokens.fsBody, fontWeight: FontWeight.w600, color: Tokens.text)),
                       const SizedBox(height: 4),
-                      Text('${w.category}·${w.variety}', style: const TextStyle(fontSize: Tokens.fsHint, color: Tokens.muted)),
+                      Text('${w.category}·${w.variety}', style: TextStyle(fontSize: Tokens.fsHint, color: Tokens.muted)),
                       const SizedBox(height: 6),
                       Row(
                         children: [
-                          Text(w.code, style: const TextStyle(fontSize: Tokens.fsLabel, color: Tokens.faint)),
+                          Text(w.code, style: TextStyle(fontSize: Tokens.fsLabel, color: Tokens.faint)),
                           const Spacer(),
-                          Text(formatPrice(w.price), style: const TextStyle(fontSize: Tokens.fsBody, color: Tokens.accent, fontWeight: FontWeight.w700)),
+                          Text(formatPrice(w.price), style: TextStyle(fontSize: Tokens.fsBody, color: Tokens.accent, fontWeight: FontWeight.w700)),
                         ],
                       ),
                       const SizedBox(height: 6),
@@ -442,6 +443,9 @@ class CollectionPage extends ConsumerWidget {
               ],
             ),
           ),
+            // CI 反馈 #7：卡片右上角直接编辑，不用右滑
+            Positioned(top: 6, right: 6, child: _editBtn(ctx, ref, true, w)),
+          ]),
         );
       });
 
@@ -452,11 +456,14 @@ class CollectionPage extends ConsumerWidget {
         SwipeAction(icon: Icons.edit_outlined, label: '编辑', color: Tokens.accent,
             onTap: () => _edit(ctx, ref, false, i)),
         SwipeAction(icon: Icons.delete_outline, label: '删除', color: Tokens.badD10,
-            onTap: () => _confirmDelete(ctx, ref, isWalnut: false, id: i.id, name: i.type)),
+            onTap: () => _confirmDelete(ctx, ref, isWalnut: false, id: i.id,
+                name: i.name.isNotEmpty ? i.name : i.type)),
       ],
-      child: NeumorphicBox(
+      child: Stack(children: [
+            NeumorphicBox(
             radius: Tokens.rCard,
-            padding: const EdgeInsets.all(14),
+            // 右侧留 34 给右上角的 ✎ 编辑按钮
+            padding: const EdgeInsets.fromLTRB(14, 14, 34, 14),
             child: Row(
               children: [
                 CoverThumb(rel: i.coverPath, size: 60),
@@ -465,15 +472,15 @@ class CollectionPage extends ConsumerWidget {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(i.type, style: const TextStyle(fontSize: Tokens.fsBody, fontWeight: FontWeight.w600, color: Tokens.text)),
+                      Text(i.name.isNotEmpty ? i.name : i.type, style: TextStyle(fontSize: Tokens.fsBody, fontWeight: FontWeight.w600, color: Tokens.text)),
                       const SizedBox(height: 4),
-                      Text('${i.category}·${i.variety}', style: const TextStyle(fontSize: Tokens.fsHint, color: Tokens.muted)),
+                      Text('${i.category}·${i.variety}', style: TextStyle(fontSize: Tokens.fsHint, color: Tokens.muted)),
                       const SizedBox(height: 6),
                       Row(
                         children: [
-                          Text(formatSize(i.sizeMm), style: const TextStyle(fontSize: Tokens.fsLabel, color: Tokens.faint)),
+                          Text(formatSize(i.sizeMm), style: TextStyle(fontSize: Tokens.fsLabel, color: Tokens.faint)),
                           const Spacer(),
-                          Text(formatPrice(i.price), style: const TextStyle(fontSize: Tokens.fsBody, color: Tokens.accent, fontWeight: FontWeight.w700)),
+                          Text(formatPrice(i.price), style: TextStyle(fontSize: Tokens.fsBody, color: Tokens.accent, fontWeight: FontWeight.w700)),
                         ],
                       ),
                     ],
@@ -482,8 +489,25 @@ class CollectionPage extends ConsumerWidget {
               ],
             ),
           ),
+            // CI 反馈 #7：卡片右上角直接编辑
+            Positioned(top: 6, right: 6, child: _editBtn(ctx, ref, false, i)),
+          ]),
         );
       });
+
+  /// 卡片右上角编辑按钮（CI 反馈 #7）
+  Widget _editBtn(BuildContext ctx, WidgetRef ref, bool isWalnut, dynamic r) =>
+      GestureDetector(
+        onTap: () => _edit(ctx, ref, isWalnut, r),
+        child: Container(
+          padding: const EdgeInsets.all(6),
+          decoration: BoxDecoration(
+            color: Tokens.accentSoft,
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: Icon(Icons.edit_outlined, size: 16, color: Tokens.accent),
+        ),
+      );
 
   Widget _tag(String t) => Container(
         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
@@ -491,19 +515,19 @@ class CollectionPage extends ConsumerWidget {
           color: Tokens.accentSoft,
           borderRadius: BorderRadius.circular(8),
         ),
-        child: Text(t, style: const TextStyle(fontSize: Tokens.fsLabel, color: Tokens.accent)),
+        child: Text(t, style: TextStyle(fontSize: Tokens.fsLabel, color: Tokens.accent)),
       );
 
-  /// 右滑「重新编辑」：打开对应新增页并预填，保存即覆盖原记录
+  /// 编辑：打开全屏新增页并预填，保存即覆盖原记录（CI 反馈 #1 全屏）
   void _edit(BuildContext ctx, WidgetRef ref, bool isWalnut, dynamic record) {
-    showModalBottomSheet(
-      context: ctx,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (_) => isWalnut
-          ? AddWalnutSheet(editWalnut: record as Walnut)
-          : AddItemSheet(editItem: record as Item),
-    ).then((_) => refreshCollection(ref));
+    Navigator.of(ctx)
+        .push(MaterialPageRoute(
+          fullscreenDialog: true,
+          builder: (_) => isWalnut
+              ? AddWalnutSheet(editWalnut: record as Walnut)
+              : AddItemSheet(editItem: record as Item),
+        ))
+        .then((_) => refreshCollection(ref));
   }
 
   /// 删除确认（二次确认，防误触）
@@ -521,22 +545,24 @@ class CollectionPage extends ConsumerWidget {
       ),
     );
     if (ok != true || id == null) return;
+    // 连原图目录一起清（patina 行不会自动级联，需显式删）
     if (isWalnut) {
-      await WalnutDao.delete(id);
+      await DeleteHelper.walnut(id);
     } else {
-      await ItemDao.delete(id);
+      await DeleteHelper.item(id);
     }
     ref.invalidate(walnutsProvider);
     ref.invalidate(itemsProvider);
   }
 
   void _openAdd(BuildContext context, WidgetRef ref, bool isWalnut) {
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (_) => isWalnut ? const AddWalnutSheet() : const AddItemSheet(),
-    ).then((_) => refreshCollection(ref));
+    Navigator.of(context)
+        .push(MaterialPageRoute(
+          fullscreenDialog: true,
+          builder: (_) =>
+              isWalnut ? const AddWalnutSheet() : const AddItemSheet(),
+        ))
+        .then((_) => refreshCollection(ref));
   }
 }
 

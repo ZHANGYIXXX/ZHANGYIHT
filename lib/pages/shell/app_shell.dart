@@ -1,30 +1,76 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../theme/tokens.dart';
 import '../../theme/nu.dart';
+import '../../logic/theme.dart';
 import '../collection/collection_page.dart';
 import '../stats/stats_page.dart';
 import '../settings/settings_page.dart';
 
-class AppShell extends StatefulWidget {
+class AppShell extends ConsumerStatefulWidget {
   const AppShell({super.key});
   @override
-  State<AppShell> createState() => _AppShellState();
+  ConsumerState<AppShell> createState() => _AppShellState();
 }
 
-class _AppShellState extends State<AppShell> {
+class _AppShellState extends ConsumerState<AppShell> {
   int _i = 0;
   final _pages = const [CollectionPage(), StatsPage(), SettingsPage()];
 
+  /// 主界面右滑 = 系统返回键 → 弹「是否退出软件」（CI 反馈 #8）
+  Future<void> _askExit() async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (d) => AlertDialog(
+        title: const Text('退出软件'),
+        content: const Text('确定要退出 ZHANGYIWW 吗？'),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(d, false),
+              child: const Text('取消')),
+          TextButton(
+              onPressed: () => Navigator.pop(d, true),
+              child: const Text('退出')),
+        ],
+      ),
+    );
+    if (ok == true) SystemNavigator.pop();
+  }
+
   @override
-  Widget build(BuildContext context) => Scaffold(
+  Widget build(BuildContext context) {
+    // 瑞鹤图主题：整幅《瑞鹤图》压到 10% 透明度做绢本底纹（可读性优先，不抢内容）
+    final crane = ref.watch(themeProvider) == ThemeKey.crane;
+    return PopScope(
+        canPop: false,
+        onPopInvokedWithResult: (didPop, _) {
+          if (didPop) return;
+          _askExit();
+        },
+        child: Scaffold(
         backgroundColor: Tokens.bg,
-        body: IndexedStack(index: _i, children: _pages),
+        body: Stack(children: [
+          if (crane)
+            Positioned.fill(
+              child: Opacity(
+                opacity: 0.10,
+                child: Image.asset('assets/theme/ruihetu.jpg',
+                    fit: BoxFit.cover, alignment: Alignment.topCenter),
+              ),
+            ),
+          Positioned.fill(child: IndexedStack(index: _i, children: _pages)),
+        ]),
         // 底部导航：照定稿原型 .botnav（height:60 / 圆角顶22 / 三段 flex:1 / 纵向居中 / padding6 / gap6）
         // 用通栏 + SafeArea 防折叠屏系统导航栏遮挡，解决"很小很奇怪"。
         bottomNavigationBar: Container(
-          decoration: const BoxDecoration(
+          decoration: BoxDecoration(
             color: Tokens.bg,
             borderRadius: BorderRadius.vertical(top: Radius.circular(22)),
+            // 瑞鹤图主题：底栏上沿一道淡金线，呼应宫阙屋檐压边
+            border: crane
+                ? Border(top: BorderSide(color: Tokens.gold, width: 1))
+                : null,
           ),
           child: SafeArea(
             top: false,
@@ -69,6 +115,7 @@ class _AppShellState extends State<AppShell> {
               ),
             ),
           ),
+        ),
         ),
       );
 }
