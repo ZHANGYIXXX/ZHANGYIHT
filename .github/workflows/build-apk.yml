@@ -1,6 +1,10 @@
 name: Build APK
 
-# 云端编译（自诊断版 v5 · 固定签名）
+# 云端编译（v6 · 固定签名 · 修复华为/HarmonyOS 打开即闪退）
+# 关键修复：AGP 9.0 会把原生库(.so)按 DEFLATE 压缩进 APK，华为/HarmonyOS 的 linker
+# 无法直接加载压缩的 .so → 安装成功但打开即闪退（进程直接死亡、无红屏）。
+# 本流程在 flutter build 之后，用 ci/uncompress_so.py 把 .so 重新打包为不压缩(STORE)，
+# 再 zipalign 对齐 + 用同一把固定密钥重签，彻底规避该问题。
 # 关键：本工程代码按 Flutter 3.47 编写，故跟随最新 stable（>= 3.47），
 # 并由同一版本重建 android 骨架保证一致。
 #
@@ -187,10 +191,34 @@ jobs:
           fi
           ls -la build/app/outputs/flutter-apk/app-release.apk
 
-      - name: Show APK signing info
-        # 自检：确认本次出包用的就是固定签名（alias=yizhanghe）
+      - name: Force uncompressed native libs + align + re-sign (fix Huawei launch crash)
+        # 1) AGP 9.0 把 .so 压缩进 APK，华为/HarmonyOS linker 加载不了 → 打开即闪退。
+        #    用 ci/uncompress_so.py 把 lib/**/*.so 重新打包为不压缩(STORE)，linker 可直接 mmap 加载。
+        # 2) 重新打包会破坏原签名，必须 zipalign 对齐后，用【同一把固定密钥】重新签名。
         run: |
-          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose build/app/outputs/flutter-apk/app-release.apk 2>&1 | grep -i "signer" || true
+          set -e
+          python3 ci/uncompress_so.py build/app/outputs/flutter-apk/app-release.apk
+          "$ANDROID_HOME/build-tools/35.0.0/zipalign" -p 4 \
+            build/app/outputs/flutter-apk/app-release.apk \
+            build/app/outputs/flutter-apk/app-release-aligned.apk
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" sign \
+            --ks android/app/release.p12 \
+            --ks-type PKCS12 \
+            --ks-key-alias yizhanghe \
+            --ks-pass pass:yizhanghe-release-2026 \
+            --key-pass pass:yizhanghe-release-2026 \
+            --out build/app/outputs/flutter-apk/app-release-signed.apk \
+            build/app/outputs/flutter-apk/app-release-aligned.apk
+          cp build/app/outputs/flutter-apk/app-release-signed.apk build/app/outputs/flutter-apk/app-release.apk
+          echo "=== .so compression after fix (应为空 = 全部不压缩) ==="
+          python3 - <<'PY'
+          import zipfile
+          z=zipfile.ZipFile("build/app/outputs/flutter-apk/app-release.apk")
+          so=[i.filename for i in z.infolist() if i.filename.endswith('.so') and i.compress_type==8]
+          print("compressed .so:", so if so else "NONE (all uncompressed)")
+          PY
+          echo "=== signing verify ==="
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose build/app/outputs/flutter-apk/app-release.apk 2>&1 | grep -i "signer"
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
