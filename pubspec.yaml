@@ -18,6 +18,10 @@ dependencies:
   shared_preferences: ^2.2.0
   # 保存图片到系统相册（大图页「保存到手机」按钮，MediaStore 方式免存储权限）
   gal: ^2.3.0
+  # V2：NAS 同步（WebDAV 通用客户端 + 极空间适配）共用底层 HTTP
+  http: ^1.2.0
+  # Digest 鉴权需要的 md5（dart:convert 未导出 md5）
+  crypto: ^3.0.3
 
 dev_dependencies:
   flutter_test:
