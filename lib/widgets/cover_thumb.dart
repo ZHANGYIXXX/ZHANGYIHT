@@ -23,6 +23,7 @@ class CoverThumb extends StatelessWidget {
               width: size,
               height: size,
               fit: BoxFit.cover,
+              filterQuality: FilterQuality.high,
               errorBuilder: (_, __, ___) => _placeholder(),
             ),
           );
