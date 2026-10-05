@@ -32,14 +32,11 @@ class _AddWalnutSheetState extends ConsumerState<AddWalnutSheet> {
   final _price = TextEditingController();
   final _merchant = TextEditingController();
   final _remark = TextEditingController();
-  // 购买日期：手动文本填入（不点选日历）
   final _buyDateCtl = TextEditingController(text: _today());
   // 走色记录日期：与购买日期独立，照片拍摄时间可单独填写（满足"上传照片时间可选"）
   final _patinaDateCtl = TextEditingController(text: _today());
-  // 大品类/品种：默认不选，需用户展开后主动选择（避免一进来铺开二十多个品种）
-  String? _category;
-  String? _variety;
-  bool _cascadeOpen = false;
+  // 品类：手填（删除预设大类/品种，全部由用户自行输入，文玩页按此名称统计）
+  final _categoryCtl = TextEditingController();
   String _channel = channels.first;
   final _lBian = TextEditingController();
   final _lDu = TextEditingController();
@@ -65,8 +62,7 @@ class _AddWalnutSheetState extends ConsumerState<AddWalnutSheet> {
     final e = widget.editWalnut;
     if (e != null) {
       _name.text = e.name;
-      _category = e.category.isNotEmpty ? e.category : null;
-      _variety = e.variety;
+      _categoryCtl.text = e.category;
       _price.text = e.price.toString();
       _lBian.text = e.lBian.toString();
       _lDu.text = e.lDu.toString();
@@ -91,7 +87,22 @@ class _AddWalnutSheetState extends ConsumerState<AddWalnutSheet> {
 
   @override
   void dispose() {
-    for (final c in [_name, _price, _merchant, _remark, _lBian, _lDu, _lGao, _rBian, _rDu, _rGao, _weight, _buyDateCtl, _patinaDateCtl]) {
+    for (final c in [
+      _name,
+      _price,
+      _merchant,
+      _remark,
+      _lBian,
+      _lDu,
+      _lGao,
+      _rBian,
+      _rDu,
+      _rGao,
+      _weight,
+      _buyDateCtl,
+      _patinaDateCtl,
+      _categoryCtl
+    ]) {
       c.dispose();
     }
     super.dispose();
@@ -195,74 +206,41 @@ class _AddWalnutSheetState extends ConsumerState<AddWalnutSheet> {
       ]);
 
   Widget _stepDot(int n, String label) => Row(children: [
-        NeumorphicBox(state: n == _step ? NeuState.raised : NeuState.inset, radius: Tokens.rPill,
-            width: 26, height: 26, child: Center(child: Text('$n', style: TextStyle(color: n == _step ? Tokens.accent : Tokens.muted)))),
+        NeumorphicBox(
+            state: n == _step ? NeuState.raised : NeuState.inset,
+            radius: Tokens.rPill,
+            width: 26,
+            height: 26,
+            child: Center(
+                child: Text('$n',
+                    style: TextStyle(
+                        color: n == _step ? Tokens.accent : Tokens.muted)))),
         const SizedBox(width: 8),
-        Text(label, style: TextStyle(color: n == _step ? Tokens.text : Tokens.muted, fontSize: Tokens.fsHint)),
+        Text(label,
+            style: TextStyle(
+                color: n == _step ? Tokens.text : Tokens.muted,
+                fontSize: Tokens.fsHint)),
       ]);
 
   Widget _step1() => Column(children: [
         _field('名称', _name, '如：四座楼矮桩'),
         const SizedBox(height: 12),
-        _cascade(),
+        _categoryField(),
         const SizedBox(height: 12),
-        Row(children: [Expanded(child: _field('价格(元)', _price, '0', isNum: true)), const SizedBox(width: 12), Expanded(child: _dateField())]),
+        Row(children: [
+          Expanded(child: _field('价格(元)', _price, '0', isNum: true)),
+          const SizedBox(width: 12),
+          Expanded(child: _dateField())
+        ]),
         const SizedBox(height: 12),
         _channelRow(),
         const SizedBox(height: 12),
         _field('商家', _merchant, '选填'),
       ]);
 
-  Widget _cascade() {
-    final sub = _category == null ? const <String>[] : walnutVarieties[_category]!;
-    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-      // 点标题展开/收起，默认收起，避免一进来就铺开二十多个品种
-      GestureDetector(
-        onTap: () => setState(() => _cascadeOpen = !_cascadeOpen),
-        child: Padding(
-          padding: const EdgeInsets.symmetric(vertical: 4),
-          child: Row(children: [
-            Text('大品类 → 品种',
-                style: TextStyle(color: Tokens.muted, fontSize: Tokens.fsHint)),
-            const Spacer(),
-            Icon(_cascadeOpen ? Icons.expand_less : Icons.expand_more,
-                color: Tokens.muted, size: 18),
-          ]),
-        ),
-      ),
-      if (_cascadeOpen) ...[
-        const SizedBox(height: 6),
-        Wrap(spacing: 8, runSpacing: 8, children: walnutCategories.map((c) {
-          final active = _category == c;
-          return NeuChip(label: c, active: active, onTap: () {
-            setState(() {
-              if (active) {
-                // 再点一次取消选择
-                _category = null;
-                _variety = null;
-              } else {
-                _category = c;
-                _variety = null;
-              }
-            });
-          });
-        }).toList()),
-        if (sub.isNotEmpty) ...[
-          const SizedBox(height: 10),
-          Text('选择品种',
-              style: TextStyle(color: Tokens.muted, fontSize: Tokens.fsHint)),
-          const SizedBox(height: 6),
-          Wrap(spacing: 8, runSpacing: 8, children: sub.map((v) => NeuChip(
-                  label: v,
-                  active: _variety == v,
-                  onTap: () => setState(() {
-                    _variety = _variety == v ? null : v;
-                  })))
-              .toList()),
-        ],
-      ],
-    ]);
-  }
+  /// 品类：手填（不再预设狮子头/南疆石等，用户自己输入，文玩页按此名称统计）
+  Widget _categoryField() =>
+      _field('品类（手填）', _categoryCtl, '如：南疆石 / 狮子头 / 四座楼');
 
   /// 入手平台：下拉菜单（CI 反馈 #6 —— 原型是 select，之前被做成按钮，改回下拉）
   Widget _channelRow() => NeuSelect(
@@ -297,8 +275,7 @@ class _AddWalnutSheetState extends ConsumerState<AddWalnutSheet> {
           Padding(
             padding: const EdgeInsets.symmetric(vertical: 4),
             child: Text('走色照片请在详情页右上角「＋走色」添加',
-                style:
-                    TextStyle(color: Tokens.faint, fontSize: Tokens.fsHint)),
+                style: TextStyle(color: Tokens.faint, fontSize: Tokens.fsHint)),
           ),
         const SizedBox(height: 12),
         _field('备注', _remark, '选填'),
@@ -307,19 +284,49 @@ class _AddWalnutSheetState extends ConsumerState<AddWalnutSheet> {
   Widget _sizeGrid() => Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
     Text('六面尺寸(mm)', style: TextStyle(color: Tokens.muted, fontSize: Tokens.fsHint)),
     const SizedBox(height: 8),
-    Row(children: [Expanded(child: _field('左·边', _lBian, '0', isNum: true)), const SizedBox(width: 8), Expanded(child: _field('左·肚', _lDu, '0', isNum: true)), const SizedBox(width: 8), Expanded(child: _field('左·高', _lGao, '0', isNum: true))]),
+    Row(children: [
+      Expanded(child: _field('左·边', _lBian, '0', isNum: true)),
+      const SizedBox(width: 8),
+      Expanded(child: _field('左·肚', _lDu, '0', isNum: true)),
+      const SizedBox(width: 8),
+      Expanded(child: _field('左·高', _lGao, '0', isNum: true))
+    ]),
     const SizedBox(height: 8),
-    Row(children: [Expanded(child: _field('右·边', _rBian, '0', isNum: true)), const SizedBox(width: 8), Expanded(child: _field('右·肚', _rDu, '0', isNum: true)), const SizedBox(width: 8), Expanded(child: _field('右·高', _rGao, '0', isNum: true))]),
+    Row(children: [
+      Expanded(child: _field('右·边', _rBian, '0', isNum: true)),
+      const SizedBox(width: 8),
+      Expanded(child: _field('右·肚', _rDu, '0', isNum: true)),
+      const SizedBox(width: 8),
+      Expanded(child: _field('右·高', _rGao, '0', isNum: true))
+    ]),
   ]);
 
-  Widget _patinaSwitchRow() => NeumorphicBox(radius: Tokens.rCard, padding: const EdgeInsets.all(14), child: Column(children: [
-    _switch('全品', _full, (v) => setState(() { _full = v; final c = Validate.coerce(_full, _repaired); _full = c.full; _repaired = c.repaired; })),
-    _switch('有修', _repaired, (v) => setState(() { _repaired = v; final c = Validate.coerce(_full, _repaired); _full = c.full; _repaired = c.repaired; })),
-    _switch('有黄', _yellow, (v) => setState(() => _yellow = v)),
-  ]));
+  Widget _patinaSwitchRow() => NeumorphicBox(
+          radius: Tokens.rCard,
+          padding: const EdgeInsets.all(14),
+          child: Column(children: [
+            _switch('全品', _full, (v) => setState(() {
+                  _full = v;
+                  final c = Validate.coerce(_full, _repaired);
+                  _full = c.full;
+                  _repaired = c.repaired;
+                })),
+            _switch('有修', _repaired, (v) => setState(() {
+                  _repaired = v;
+                  final c = Validate.coerce(_full, _repaired);
+                  _full = c.full;
+                  _repaired = c.repaired;
+                })),
+            _switch('有黄', _yellow, (v) => setState(() => _yellow = v)),
+          ]));
 
-  Widget _switch(String label, bool v, ValueChanged<bool> on) => Padding(padding: const EdgeInsets.symmetric(vertical: 4),
-      child: Row(children: [Text(label, style: TextStyle(color: Tokens.text)), const Spacer(), NeuSwitch(value: v, onChanged: on)]));
+  Widget _switch(String label, bool v, ValueChanged<bool> on) => Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Row(children: [
+        Text(label, style: TextStyle(color: Tokens.text)),
+        const Spacer(),
+        NeuSwitch(value: v, onChanged: on)
+      ]));
 
   Widget _coverPicker() {
     final cur = _cover ?? _existingCover;
@@ -360,18 +367,26 @@ class _AddWalnutSheetState extends ConsumerState<AddWalnutSheet> {
     if (xs.isNotEmpty) setState(() => _cover = xs.first);
   }
 
-  Widget _patinaPicker() => GestureDetector(onTap: () async {
-        final xs = await pickImagesFromSheet(context, multiple: true);
-        if (xs.isNotEmpty) setState(() => _patina.addAll(xs));
-      }, child: NeumorphicBox(radius: Tokens.rCard, padding: const EdgeInsets.all(14), child: Row(children: [
-        Icon(Icons.collections, color: Tokens.accent),
-        const SizedBox(width: 10),
-        Expanded(
-          child: Text(_patina.isEmpty ? '添加走色记录图（可多张）' : '已选 ${_patina.length} 张走色图',
-              style: TextStyle(color: Tokens.text)),
-        ),
-        Icon(Icons.chevron_right, color: Tokens.muted, size: 20),
-      ])));
+  Widget _patinaPicker() => GestureDetector(
+          onTap: () async {
+            final xs = await pickImagesFromSheet(context, multiple: true);
+            if (xs.isNotEmpty) setState(() => _patina.addAll(xs));
+          },
+          child: NeumorphicBox(
+              radius: Tokens.rCard,
+              padding: const EdgeInsets.all(14),
+              child: Row(children: [
+                Icon(Icons.collections, color: Tokens.accent),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                      _patina.isEmpty
+                          ? '添加走色记录图（可多张）'
+                          : '已选 ${_patina.length} 张走色图',
+                      style: TextStyle(color: Tokens.text)),
+                ),
+                Icon(Icons.chevron_right, color: Tokens.muted, size: 20),
+              ])));
 
   /// 已选走色图缩略图：点开看大图，右上角 × 移除该张
   Widget _patinaGrid() => Wrap(
@@ -398,8 +413,7 @@ class _AddWalnutSheetState extends ConsumerState<AddWalnutSheet> {
                     decoration: BoxDecoration(
                         color: Colors.black45,
                         borderRadius: BorderRadius.circular(10)),
-                    child: const Icon(Icons.close,
-                        color: Colors.white, size: 14),
+                    child: const Icon(Icons.close, color: Colors.white, size: 14),
                   ),
                 ),
               ),
@@ -437,19 +451,28 @@ class _AddWalnutSheetState extends ConsumerState<AddWalnutSheet> {
     );
   }
 
-  Widget _field(String label, TextEditingController c, String hint, {bool isNum = false}) => Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+  Widget _field(String label, TextEditingController c, String hint,
+          {bool isNum = false}) =>
+      Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         Text(label, style: TextStyle(color: Tokens.muted, fontSize: Tokens.fsHint)),
         const SizedBox(height: 6),
-        NeuTextField(hint: hint, controller: c, keyboardType: isNum ? TextInputType.number : null),
+        NeuTextField(
+            hint: hint,
+            controller: c,
+            keyboardType: isNum ? TextInputType.number : null),
       ]);
 
   /// 购买日期：手动文本填入（不点选日历）
   Widget _dateField() => _field('购买日期', _buyDateCtl, '如 2026-10-04');
 
   Widget _actions(BuildContext context) => Row(children: [
-        if (_step == 2) Expanded(child: NeuButton(label: '上一步', onTap: () => setState(() => _step = 1))),
+        if (_step == 2)
+          Expanded(child: NeuButton(label: '上一步', onTap: () => setState(() => _step = 1))),
         if (_step == 2) const SizedBox(width: 12),
-        Expanded(child: NeuButton(label: _step == 1 ? '下一步' : '保存', onTap: () => _step == 1 ? _next() : _save(context))),
+        Expanded(
+            child: NeuButton(
+                label: _step == 1 ? '下一步' : '保存',
+                onTap: () => _step == 1 ? _next() : _save(context))),
       ]);
 
   void _next() {
@@ -487,8 +510,8 @@ class _AddWalnutSheetState extends ConsumerState<AddWalnutSheet> {
         id: e?.id,
         code: code,
         name: _name.text.trim(),
-        category: _category ?? '',
-        variety: _variety ?? '',
+        category: _categoryCtl.text.trim(),
+        variety: '',
         price: _d(_price),
         lBian: _d(_lBian),
         lDu: _d(_lDu),
@@ -553,5 +576,6 @@ class _AddWalnutSheetState extends ConsumerState<AddWalnutSheet> {
     if (mounted) Navigator.pop(context);
   }
 
-  void _toast(String m) => ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(m)));
+  void _toast(String m) =>
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(m)));
 }

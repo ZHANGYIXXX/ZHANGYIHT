@@ -292,20 +292,34 @@ jobs:
       - name: Bundle sqlite3.dll for sqflite_ffi
         shell: pwsh
         run: |
-          # sqflite_common_ffi 需要 sqlite3.dll；优先从 pub 缓存的 sqlite3 包取，
-          # 找不到就下载官方预编译 dll（x64）
+          # sqflite_common_ffi 需要 sqlite3.dll；优先从 pub 缓存取，
+          # 找不到再动态解析 sqlite.org 最新预编译 dll（不再硬编码版本/年份，避免 404）
           $dst = "build\windows\x64\runner\Release"
+          if (-not (Test-Path $dst)) { New-Item -ItemType Directory -Force -Path $dst | Out-Null }
+
           $src = Get-ChildItem "$env:LOCALAPPDATA\Pub\Cache" -Recurse -Filter "sqlite3.dll" -ErrorAction SilentlyContinue | Select-Object -First 1
           if ($src) {
             Copy-Item $src.FullName "$dst\sqlite3.dll" -Force
-            Write-Host "sqlite3.dll bundled from pub cache"
+            Write-Host "sqlite3.dll bundled from pub cache: $($src.FullName)"
           } else {
-            $url = "https://www.sqlite.org/2026/sqlite-dll-win-x64-3500200.zip"
+            Write-Host "pub cache 中无 sqlite3.dll，转从 sqlite.org 动态解析最新 x64 预编译包..."
+            $html = (Invoke-WebRequest -Uri "https://www.sqlite.org/download.html" -UseBasicParsing).Content
+            $m = [regex]::Match($html, 'href="(\.\./)?(\d{4})/sqlite-dll-win-x64-(\d+)\.zip"')
+            if (-not $m.Success) { throw "未能从 sqlite.org/download.html 解析到 sqlite-dll-win-x64 链接" }
+            $year = $m.Groups[2].Value
+            $ver = $m.Groups[3].Value
+            $url = "https://www.sqlite.org/$year/sqlite-dll-win-x64-$ver.zip"
+            Write-Host "解析到下载链接: $url"
             $tmp = "$env:TEMP\sq.zip"
             Invoke-WebRequest -Uri $url -OutFile $tmp
             Expand-Archive -Path $tmp -DestinationPath "$env:TEMP\sq" -Force
             Copy-Item "$env:TEMP\sq\sqlite3.dll" "$dst\sqlite3.dll" -Force
-            Write-Host "sqlite3.dll downloaded"
+            Write-Host "sqlite3.dll downloaded ($ver)"
+          }
+
+          # 断言：缺 dll 出包必闪退，提前 fail 而非带病出包
+          if (-not (Test-Path "$dst\sqlite3.dll")) {
+            throw "sqlite3.dll 仍未就位，Windows 端将无法启动（sqflite_ffi 依赖）"
           }
           Get-ChildItem $dst | Select-Object Name,Length
 

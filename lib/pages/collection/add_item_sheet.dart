@@ -18,7 +18,9 @@ import '../../widgets/neu_select.dart';
 class AddItemSheet extends ConsumerStatefulWidget {
   /// 编辑模式：传入即预填，保存时 update；为空则是新增
   final Item? editItem;
-  const AddItemSheet({super.key, this.editItem});
+  /// 从文玩页点具体分类（手串/吊坠/手把件/摆件）后「＋新增」时预选类型
+  final String? initialType;
+  const AddItemSheet({super.key, this.editItem, this.initialType});
   @override
   ConsumerState<AddItemSheet> createState() => _AddItemSheetState();
 }
@@ -26,9 +28,8 @@ class AddItemSheet extends ConsumerStatefulWidget {
 class _AddItemSheetState extends ConsumerState<AddItemSheet> {
   int _step = 1;
   String _type = itemTypes.first;
-  String _category = itemCategoryVariety.keys.first;
-  String _variety = itemCategoryVariety.values.first.first;
-  final _varietyFree = TextEditingController();
+  // 品类：手填（删除预设材质/品种级联，用户自行输入，文玩页按此名称统计）
+  final _categoryCtl = TextEditingController();
   final _name = TextEditingController();
   final _price = TextEditingController();
   final _size = TextEditingController();
@@ -41,8 +42,6 @@ class _AddItemSheetState extends ConsumerState<AddItemSheet> {
   XFile? _cover; // 本次新选封面
   XFile? _existingCover; // 编辑时已有的封面（解析为文件）
   bool _saving = false;
-  bool _varietyIsFree = false;
-  String? _openCascade; // 当前展开的级联下拉标题（null = 全收起）
 
   static String _today() {
     final d = DateTime.now();
@@ -57,12 +56,7 @@ class _AddItemSheetState extends ConsumerState<AddItemSheet> {
       _type = e.type;
       // 升级前录入的记录没有名称，用类型名兜底，避免一进编辑就被必填卡住
       _name.text = e.name.isNotEmpty ? e.name : e.type;
-      _category =
-          e.category.isNotEmpty ? e.category : itemCategoryVariety.keys.first;
-      _variety = e.variety;
-      _varietyIsFree = !(_variety.isEmpty ||
-          (itemCategoryVariety[_category]?.contains(_variety) ?? false));
-      if (_varietyIsFree) _varietyFree.text = _variety;
+      _categoryCtl.text = e.category;
       _price.text = e.price.toString();
       _size.text = e.sizeMm.toString();
       if (e.type == '手串') _strand.text = e.strandType;
@@ -76,6 +70,7 @@ class _AddItemSheetState extends ConsumerState<AddItemSheet> {
             (p) => mounted ? setState(() => _existingCover = XFile(p)) : null);
       }
     } else {
+      _type = widget.initialType ?? itemTypes.first;
       _buyDateCtl.text = _today();
     }
   }
@@ -83,7 +78,7 @@ class _AddItemSheetState extends ConsumerState<AddItemSheet> {
   @override
   void dispose() {
     for (final c in [
-      _varietyFree,
+      _categoryCtl,
       _name,
       _price,
       _size,
@@ -194,7 +189,7 @@ class _AddItemSheetState extends ConsumerState<AddItemSheet> {
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(m)));
 
   Widget _stepper() => Row(children: [
-        _dot(1, '类型 · 材质'),
+        _dot(1, '类型 · 品类'),
         Expanded(child: Divider(color: Tokens.faint)),
         _dot(2, '尺寸 · 图'),
       ]);
@@ -218,9 +213,7 @@ class _AddItemSheetState extends ConsumerState<AddItemSheet> {
   Widget _step1() => Column(children: [
         _typeRow(),
         const SizedBox(height: 12),
-        _materialRow(),
-        const SizedBox(height: 12),
-        _varietyRow(),
+        _categoryField(),
         const SizedBox(height: 12),
         Row(children: [
           Expanded(child: _field('名称', _name, '必填')),
@@ -257,95 +250,9 @@ class _AddItemSheetState extends ConsumerState<AddItemSheet> {
         ],
       );
 
-  /// 材质 → 品种：折叠级联下拉（照定稿原型 f-group / f-variety 的 select 级联）
-  Widget _materialRow() => Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text('材质',
-              style: TextStyle(color: Tokens.muted, fontSize: Tokens.fsHint)),
-          const SizedBox(height: 8),
-          _cascade(
-            label: _category,
-            options: itemCategoryVariety.keys.toList(),
-            onPick: (m) => setState(() {
-              _category = m;
-              final list = itemCategoryVariety[m]!;
-              _varietyIsFree = list.isEmpty;
-              _variety = list.isEmpty ? '' : list.first;
-            }),
-          ),
-        ],
-      );
-
-  Widget _varietyRow() {
-    if (_varietyIsFree) {
-      return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Text('品种（手动输入）',
-            style: TextStyle(color: Tokens.muted, fontSize: Tokens.fsHint)),
-        const SizedBox(height: 6),
-        NeuTextField(hint: '如：崖柏', controller: _varietyFree),
-      ]);
-    }
-    final list = itemCategoryVariety[_category] ?? const <String>[];
-    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-      Text('品种',
-          style: TextStyle(color: Tokens.muted, fontSize: Tokens.fsHint)),
-      const SizedBox(height: 8),
-      _cascade(
-        label: _variety.isEmpty ? '不选' : _variety,
-        options: ['不选', ...list],
-        onPick: (v) => setState(() => _variety = v == '不选' ? '' : v),
-      ),
-    ]);
-  }
-
-  /// 折叠级联下拉：点标题展开选项，再点已选项取消
-  Widget _cascade({
-    required String label,
-    required List<String> options,
-    required ValueChanged<String> onPick,
-  }) {
-    final open = _openCascade == label;
-    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-      GestureDetector(
-        onTap: () => setState(() => _openCascade = open ? null : label),
-        child: NeumorphicBox(
-          state: open ? NeuState.inset : NeuState.raised,
-          radius: Tokens.rInput,
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 13),
-          child: Row(children: [
-            Expanded(
-                child: Text(label,
-                    style: TextStyle(
-                        fontSize: Tokens.fsBody, color: Tokens.text))),
-            Icon(open ? Icons.arrow_drop_up : Icons.arrow_drop_down,
-                size: 18, color: Tokens.muted),
-          ]),
-        ),
-      ),
-      if (open)
-        Padding(
-          padding: const EdgeInsets.only(top: 8),
-          child: NeumorphicBox(
-            state: NeuState.inset,
-            radius: Tokens.rInput,
-            padding: const EdgeInsets.all(10),
-            child: Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              children: options
-                  .map((o) => NeuChip(
-                        label: o,
-                        active: o == label,
-                        onTap: () =>
-                            setState(() => {_openCascade = null, onPick(o)}),
-                      ))
-                  .toList(),
-            ),
-          ),
-        ),
-    ]);
-  }
+  /// 品类：手填（删除预设材质/品种级联，用户自行输入，文玩页按此名称统计）
+  Widget _categoryField() =>
+      _field('品类（手填）', _categoryCtl, '如：星月菩提 / 南红 / 猛犸');
 
   /// 入手平台：下拉菜单（CI 反馈 #6 —— 原型是 select，之前被做成按钮，改回下拉）
   Widget _channelRow() => NeuSelect(
@@ -437,8 +344,7 @@ class _AddItemSheetState extends ConsumerState<AddItemSheet> {
       onTap: () => _preview([f], 0),
       child: ClipRRect(
         borderRadius: BorderRadius.circular(size / 3),
-        child: Image.file(File(f.path),
-            width: size, height: size, fit: BoxFit.cover),
+        child: Image.file(File(f.path), width: size, height: size, fit: BoxFit.cover),
       ),
     );
   }
@@ -492,16 +398,14 @@ class _AddItemSheetState extends ConsumerState<AddItemSheet> {
 
   Future<void> _doSave(BuildContext context) async {
     final e = widget.editItem;
-    final variety =
-        _varietyIsFree ? _varietyFree.text.trim() : _variety;
     final coverPath = e?.coverPath ?? '';
     final it = Item(
       id: e?.id,
       type: _type,
       name: _name.text.trim(), // 之前漏了这一行：名称只校验不入库
       code: e?.code ?? '',
-      category: _category,
-      variety: variety,
+      category: _categoryCtl.text.trim(),
+      variety: '',
       sizeMm: _d(_size),
       strandType: _type == '手串' ? _strand.text.trim() : '',
       weight: _d(_weight),
@@ -524,23 +428,22 @@ class _AddItemSheetState extends ConsumerState<AddItemSheet> {
     } else {
       final seq = await ItemDao.maxSeqSameDay(_type, _buyDateCtl.text);
       code = CodeGen.format(_type, _buyDateCtl.text, seq);
-      id = await ItemDao.insert(
-          Item(
-            type: it.type,
-            name: it.name,
-            code: code,
-            category: it.category,
-            variety: it.variety,
-            sizeMm: it.sizeMm,
-            strandType: it.strandType,
-            weight: it.weight,
-            buyDate: it.buyDate,
-            channel: it.channel,
-            merchant: it.merchant,
-            price: it.price,
-            coverPath: '',
-            remark: it.remark,
-          ));
+      id = await ItemDao.insert(Item(
+        type: it.type,
+        name: it.name,
+        code: code,
+        category: it.category,
+        variety: it.variety,
+        sizeMm: it.sizeMm,
+        strandType: it.strandType,
+        weight: it.weight,
+        buyDate: it.buyDate,
+        channel: it.channel,
+        merchant: it.merchant,
+        price: it.price,
+        coverPath: '',
+        remark: it.remark,
+      ));
     }
 
     // 新选封面则保存并回写

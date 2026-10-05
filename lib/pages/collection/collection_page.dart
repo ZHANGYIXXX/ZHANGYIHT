@@ -15,49 +15,51 @@ import 'item_detail_page.dart';
 import 'add_walnut_sheet.dart';
 import 'add_item_sheet.dart';
 
-class CollectionPage extends ConsumerWidget {
+class CollectionPage extends ConsumerStatefulWidget {
   const CollectionPage({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final tab = ref.watch(collectionTabProvider);
-    final lv = ref.watch(collectionMenuLvProvider);
-    final sub = ref.watch(collectionSubProvider);
-    final group = ref.watch(collectionGroupProvider);
-    final variety = ref.watch(collectionVarietyProvider);
+  ConsumerState<CollectionPage> createState() => _CollectionPageState();
+}
 
-    // curCat 持久（照原型）：tab 为核桃时看核桃，否则按二级 sub 看其他类
-    final isWalnut = tab == '核桃';
-    // 按 tab 只订阅需要的那一路数据：原来同时 watch 两路，
-    // 每次切 tab / 改筛选都会同时触发两次全表查询，是卡顿主因之一
-    final walnuts = isWalnut ? ref.watch(walnutsProvider) : null;
-    final items = isWalnut ? null : ref.watch(itemsProvider);
+class _CollectionPageState extends ConsumerState<CollectionPage> {
+  final _searchCtl = TextEditingController();
+
+  @override
+  void initState() {
+    super.initState();
+    // 搜索框实时写入 provider（NeuTextField 无 onChanged，这里用原生 TextField + listener）
+    _searchCtl.addListener(() {
+      ref.read(collectionSearchProvider.notifier).state = _searchCtl.text;
+    });
+  }
+
+  @override
+  void dispose() {
+    _searchCtl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final cat = ref.watch(collectionCatProvider);
+    final filter = ref.watch(collectionFilterProvider);
+    final search = ref.watch(collectionSearchProvider);
+    final walnutsAsync = ref.watch(walnutsProvider);
+    final itemsAsync = ref.watch(itemsProvider);
 
     return Scaffold(
       backgroundColor: Tokens.bg,
       body: SafeArea(
         child: Column(
           children: [
-            _header(context, ref, isWalnut),
-            _catMenu(ref, tab, lv, sub),
-            _crumb(isWalnut, sub, group, variety),
-            _filters(context, ref, isWalnut, group, variety),
+            _header(context, ref),
+            _searchRow(),
+            _catTabs(ref, cat),
+            _filterRow(context, ref, walnutsAsync, itemsAsync, cat, filter),
             const SizedBox(height: 8),
             Expanded(
-              // 只处理当前 tab 那一路数据，避免嵌套 when 的双层重建
-              child: isWalnut
-                  ? walnuts!.when(
-                      loading: () => const Center(child: CircularProgressIndicator()),
-                      error: (e, _) => Center(child: Text('加载失败: $e')),
-                      data: (wn) => _listBody(context, ref, isWalnut, wn, const [],
-                          group, variety, sub),
-                    )
-                  : items!.when(
-                      loading: () => const Center(child: CircularProgressIndicator()),
-                      error: (e, _) => Center(child: Text('加载失败: $e')),
-                      data: (it) => _listBody(context, ref, isWalnut, const [], it,
-                          group, '', sub),
-                    ),
+              child: _body(walnutsAsync, itemsAsync, cat, filter, search, ref),
             ),
           ],
         ),
@@ -65,16 +67,13 @@ class CollectionPage extends ConsumerWidget {
     );
   }
 
-  /// 顶栏：标题居中 + 右上角独立「＋新增」（照定稿原型 appbar 三段式）
-  Widget _header(BuildContext context, WidgetRef ref, bool isWalnut) {
+  /// 顶栏：标题居中 + 右上角独立「＋新增」
+  Widget _header(BuildContext context, WidgetRef ref) {
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 14, 16, 6),
       child: Row(
         children: [
-          const Expanded(
-            flex: 1,
-            child: SizedBox(), // 左占位，保证标题真正居中
-          ),
+          const Expanded(flex: 1, child: SizedBox()),
           Text('文玩档案',
               style: TextStyle(
                   fontSize: Tokens.fsEmph,
@@ -85,12 +84,11 @@ class CollectionPage extends ConsumerWidget {
             child: Align(
               alignment: Alignment.centerRight,
               child: GestureDetector(
-                onTap: () => _openAdd(context, ref, isWalnut),
+                onTap: () => _openAdd(context, ref),
                 child: NeumorphicBox(
                   state: NeuState.inset,
                   radius: Tokens.rBtn,
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 15, vertical: 9),
+                  padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 9),
                   child: Text('＋新增',
                       style: TextStyle(
                           fontSize: Tokens.fsBody,
@@ -105,169 +103,109 @@ class CollectionPage extends ConsumerWidget {
     );
   }
 
-  /// 两级子菜单（照定稿原型 renderCatMenu）：
-  /// 一级 = 核桃 / 其他；点「其他」进二级（手串·吊坠·手把件·摆件 + ‹返回）
-  Widget _catMenu(WidgetRef ref, String tab, int lv, String sub) {
-    if (lv == 1) {
-      return Padding(
-        padding: const EdgeInsets.fromLTRB(12, 0, 12, 10),
-        child: Row(
-          children: [
-            Expanded(child: _catTab(ref, '核桃', tab == '核桃', () {
-              ref.read(collectionTabProvider.notifier).state = '核桃';
-              ref.read(collectionMenuLvProvider.notifier).state = 1;
-              ref.read(collectionGroupProvider.notifier).state = '';
-              ref.read(collectionVarietyProvider.notifier).state = '';
-            })),
-            const SizedBox(width: 8),
-            Expanded(child: _catTab(ref, '其他', tab == '其他', () {
-              ref.read(collectionTabProvider.notifier).state = '其他';
-              ref.read(collectionMenuLvProvider.notifier).state = 2;
-              // 原型：进入其他时若当前类型不在四类内，落到「手串」
-              ref.read(collectionGroupProvider.notifier).state = '';
-            })),
-          ],
-        ),
-      );
-    }
-    // 二级：纵向容器 + 返回 + 四类横排
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(12, 0, 12, 10),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          GestureDetector(
-            onTap: () => ref.read(collectionMenuLvProvider.notifier).state = 1,
-            child: NeumorphicBox(
-              state: NeuState.raised,
-              radius: Tokens.rBtn,
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 9),
-              child: Text('‹ 返回',
-                  style: TextStyle(
-                      fontSize: Tokens.fsBody,
-                      fontWeight: FontWeight.w600,
-                      color: Tokens.muted)),
-            ),
-          ),
-          const SizedBox(height: 8),
-          Row(
+  /// 搜索框：模糊匹配名称或品类（如输入「大蒜头」直接定位）
+  Widget _searchRow() => Padding(
+        padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
+        child: NeumorphicBox(
+          state: NeuState.inset,
+          radius: Tokens.rInput,
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
+          child: Row(
             children: [
-              for (final t in itemTypes) ...[
-                Expanded(
-                    child: _catTab(ref, t, sub == t, () => _pickOther(ref, t))),
-                if (t != itemTypes.last) const SizedBox(width: 8),
-              ],
+              Icon(Icons.search, size: 18, color: Tokens.muted),
+              const SizedBox(width: 8),
+              Expanded(
+                child: TextField(
+                  controller: _searchCtl,
+                  style: TextStyle(fontSize: Tokens.fsBody, color: Tokens.text),
+                  decoration: InputDecoration(
+                    border: InputBorder.none,
+                    hintText: '搜索名称或品类，如：大蒜头',
+                    hintStyle: TextStyle(color: Tokens.faint, fontSize: Tokens.fsBody),
+                    isCollapsed: true,
+                    contentPadding: const EdgeInsets.symmetric(vertical: 11),
+                  ),
+                ),
+              ),
+              if (_searchCtl.text.isNotEmpty)
+                GestureDetector(
+                  onTap: () => _searchCtl.clear(),
+                  child: Icon(Icons.close, size: 18, color: Tokens.muted),
+                ),
             ],
           ),
-        ],
-      ),
-    );
-  }
-
-  /// 选中其他类的某个类型：换二级类型 → 清空材质筛选（照原型 afterCat）
-  void _pickOther(WidgetRef ref, String t) {
-    ref.read(collectionSubProvider.notifier).state = t;
-    ref.read(collectionGroupProvider.notifier).state = '';
-    ref.read(collectionVarietyProvider.notifier).state = '';
-  }
-
-  Widget _catTab(WidgetRef ref, String label, bool on, VoidCallback onTap) {
-    // 统一：默认 raised 凸起，on 也 raised 但 color 加深（不用阴影切换 active 状态）
-    // 按下时 NeuState.pressed = inSm 凹陷 =「时间 ↓」触感
-    return _PressableTab(label: label, on: on, onTap: onTap);
-  }
-
-  /// 面包屑（照定稿原型 updateCrumb 逐条翻译）：
-  /// 核桃 = 文玩档案 › 核桃 [› 品类 [› 品种]]；其他 = 文玩档案 › 其他 › 类型 [› 材质]
-  Widget _crumb(bool isWalnut, String sub, String group, String variety) {
-    final String head;
-    String seg3 = '';
-    if (isWalnut) {
-      head = '核桃';
-      if (group.isNotEmpty) {
-        seg3 = variety.isNotEmpty ? '$group › $variety' : group;
-      }
-    } else {
-      head = '其他 › $sub';
-      if (group.isNotEmpty) seg3 = group;
-    }
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 0, 16, 10),
-      child: Text.rich(
-        TextSpan(children: [
-          TextSpan(
-              text: '文玩档案 › ',
-              style: TextStyle(
-                  fontSize: Tokens.fsHint, color: Tokens.faint)),
-          TextSpan(
-              text: seg3.isEmpty ? head : '$head › $seg3',
-              style: TextStyle(
-                  fontSize: Tokens.fsHint,
-                  color: Tokens.muted,
-                  fontWeight: FontWeight.w600)),
-        ]),
-      ),
-    );
-  }
-
-  /// 筛选区（照定稿原型 buildFilters）：
-  /// 核桃 = 大品类 + 品种两级级联（未选品类时品种置灰「请先选品类」）；
-  /// 其他 = 单个材质下拉
-  Widget _filters(BuildContext context, WidgetRef ref, bool isWalnut,
-      String group, String variety) {
-    if (isWalnut) {
-      final varieties =
-          group.isEmpty ? const <String>[] : (walnutVarieties[group] ?? const []);
-      return Padding(
-        padding: const EdgeInsets.fromLTRB(12, 0, 12, 0),
-        child: Row(
-          children: [
-            Expanded(
-                child: _selectBox(
-              context,
-              group.isEmpty ? '全部品类' : group,
-              walnutCategories,
-              (v) {
-                ref.read(collectionGroupProvider.notifier).state =
-                    v == '全部品类' ? '' : v;
-                ref.read(collectionVarietyProvider.notifier).state = '';
-              },
-            )),
-            const SizedBox(width: 9),
-            Expanded(
-              child: varieties.isEmpty
-                  ? _disabledBox('请先选品类')
-                  : _selectBox(
-                      context,
-                      variety.isEmpty ? '全部品种' : variety,
-                      ['全部品种', ...varieties],
-                      (v) => ref.read(collectionVarietyProvider.notifier).state =
-                          v == '全部品种' ? '' : v,
-                    ),
-            ),
-          ],
         ),
       );
-    }
-    // 其他分支：材质单选（树籽 / 牙骨角 / 木质 / 矿石）
-    final mats = itemCategoryVariety.keys.toList();
+
+  /// 扁平一级分类 tab：全部 / 核桃 / 手串 / 吊坠 / 手把件 / 摆件
+  /// 点击任意分类即重置二级品类筛选为「全部品类」
+  Widget _catTabs(WidgetRef ref, String cat) {
+    final tabs = [allCat, ...categories];
     return Padding(
-      padding: const EdgeInsets.fromLTRB(12, 0, 12, 0),
-      child: Row(children: [
-        Expanded(
-            child: _selectBox(
-                context, group.isEmpty ? '全部品类' : group, ['全部品类', ...mats],
-                (v) {
-          ref.read(collectionGroupProvider.notifier).state =
-              v == '全部品类' ? '' : v;
-        })),
-      ]),
+      padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
+      child: SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        child: Row(
+          children: [
+            for (final t in tabs) ...[
+              _catTab(ref, t, cat == t, () {
+                ref.read(collectionCatProvider.notifier).state = t;
+                ref.read(collectionFilterProvider.notifier).state = '';
+              }),
+              if (t != tabs.last) const SizedBox(width: 8),
+            ],
+          ],
+        ),
+      ),
     );
   }
 
-  /// 新拟态下拉：外观用凹陷框 + 弹出底部菜单选项（等价原型 <select>）
-  Widget _selectBox(BuildContext context, String current,
-      List<String> options, ValueChanged<String> onPick) {
+  Widget _catTab(WidgetRef ref, String label, bool on, VoidCallback onTap) =>
+      _PressableTab(label: label, on: on, onTap: onTap);
+
+  /// 二级品类下拉（合并原「全部品类」+「右边品类」两项）：
+  /// 直接列出当前数据里手填的品类名称并带计数，选择即按该名称过滤
+  Widget _filterRow(BuildContext context, WidgetRef ref,
+      AsyncValue<List<Walnut>> wA, AsyncValue<List<Item>> iA, String cat, String filter) {
+    final counts = <String, int>{};
+    void addCats(List<String> cats) {
+      for (final c in cats) {
+        if (c.isNotEmpty) counts[c] = (counts[c] ?? 0) + 1;
+      }
+    }
+
+    if (cat == allCat || cat == '核桃') {
+      final wn = wA.value;
+      if (wn != null) addCats(wn.map((w) => w.category).toList());
+    }
+    if (cat == allCat || cat != '核桃') {
+      final it = iA.value;
+      if (it != null) {
+        final visible = cat == allCat ? it : it.where((e) => e.type == cat).toList();
+        addCats(visible.map((e) => e.category).toList());
+      }
+    }
+
+    final rawOpts = counts.keys.toList()..sort();
+    final displayOpts = <String>['全部品类', ...rawOpts.map((o) => '$o (${counts[o]})')];
+    final currentLabel = filter.isEmpty ? '全部品类' : '$filter (${counts[filter] ?? 0})';
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(12, 0, 12, 0),
+      child: _selectBox(context, currentLabel, displayOpts, (v) {
+        final idx = displayOpts.indexOf(v);
+        if (idx <= 0) {
+          ref.read(collectionFilterProvider.notifier).state = '';
+        } else {
+          ref.read(collectionFilterProvider.notifier).state = rawOpts[idx - 1];
+        }
+      }),
+    );
+  }
+
+  /// 新拟态下拉：凹陷框 + 底部弹出选项（等价原型 <select>）
+  Widget _selectBox(BuildContext context, String current, List<String> options,
+      ValueChanged<String> onPick) {
     return GestureDetector(
       onTap: () => _openSelect(context, current, options, onPick),
       child: NeumorphicBox(
@@ -279,8 +217,7 @@ class CollectionPage extends ConsumerWidget {
             Expanded(
               child: Text(current,
                   overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                      fontSize: Tokens.fsBody, color: Tokens.text)),
+                  style: TextStyle(fontSize: Tokens.fsBody, color: Tokens.text)),
             ),
             Icon(Icons.arrow_drop_down, size: 18, color: Tokens.muted),
           ],
@@ -289,27 +226,13 @@ class CollectionPage extends ConsumerWidget {
     );
   }
 
-  Widget _disabledBox(String label) => NeumorphicBox(
-        state: NeuState.inset,
-        radius: Tokens.rInput,
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-        child: Row(children: [
-          Expanded(
-              child: Text(label,
-                  style: TextStyle(
-                      fontSize: Tokens.fsBody, color: Tokens.faint))),
-          Icon(Icons.arrow_drop_down, size: 18, color: Tokens.faint),
-        ]),
-      );
-
-  Future<void> _openSelect(BuildContext context, String current,
-      List<String> options, ValueChanged<String> onPick) async {
+  Future<void> _openSelect(BuildContext context, String current, List<String> options,
+      ValueChanged<String> onPick) async {
     final v = await showModalBottomSheet<String>(
       context: context,
       backgroundColor: Colors.transparent,
       builder: (c) => Container(
-        constraints:
-            BoxConstraints(maxHeight: MediaQuery.of(c).size.height * 0.6),
+        constraints: BoxConstraints(maxHeight: MediaQuery.of(c).size.height * 0.6),
         decoration: BoxDecoration(
             color: Tokens.bg,
             borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
@@ -326,23 +249,16 @@ class CollectionPage extends ConsumerWidget {
                     state: o == current ? NeuState.raised : NeuState.inset,
                     radius: Tokens.rInput,
                     color: o == current ? Tokens.accentSoft : Tokens.bg,
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 14, vertical: 13),
+                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 13),
                     child: Row(children: [
                       Expanded(
                         child: Text(o,
                             style: TextStyle(
                                 fontSize: Tokens.fsBody,
-                                color: o == current
-                                    ? Tokens.accent
-                                    : Tokens.text,
-                                fontWeight: o == current
-                                    ? FontWeight.w700
-                                    : FontWeight.normal)),
+                                color: o == current ? Tokens.accent : Tokens.text,
+                                fontWeight: o == current ? FontWeight.w700 : FontWeight.normal)),
                       ),
-                      if (o == current)
-                        Icon(Icons.check,
-                            size: 18, color: Tokens.accent),
+                      if (o == current) Icon(Icons.check, size: 18, color: Tokens.accent),
                     ]),
                   ),
                 ),
@@ -354,20 +270,78 @@ class CollectionPage extends ConsumerWidget {
     if (v != null) onPick(v);
   }
 
-  Widget _listBody(BuildContext context, WidgetRef ref, bool isWalnut,
-      List<Walnut> wn, List<Item> it, String group, String variety,
-      String sub) {
-    final list = _buildList(ref, isWalnut, wn, it, group, variety, sub);
+  Widget _body(AsyncValue<List<Walnut>> wA, AsyncValue<List<Item>> iA,
+      String cat, String filter, String search, WidgetRef ref) {
+    if (cat == '核桃') {
+      return wA.when(
+        loading: () => const Center(child: CircularProgressIndicator()),
+        error: (e, _) => Center(child: Text('加载失败: $e')),
+        data: (wn) => _listBody(ref,
+            _filterWalnuts(wn, filter, search).map((w) => _walnutCard(w, ref)).toList()),
+      );
+    }
+    if (cat == allCat) {
+      return wA.when(
+        loading: () => const Center(child: CircularProgressIndicator()),
+        error: (e, _) => Center(child: Text('加载失败: $e')),
+        data: (wn) => iA.when(
+          loading: () => const Center(child: CircularProgressIndicator()),
+          error: (e, _) => Center(child: Text('加载失败: $e')),
+          data: (it) => _listBody(ref, [
+            ..._filterWalnuts(wn, filter, search).map((w) => _walnutCard(w, ref)),
+            ..._filterItems(it, cat, filter, search).map((e) => _itemCard(e, ref)),
+          ]),
+        ),
+      );
+    }
+    return iA.when(
+      loading: () => const Center(child: CircularProgressIndicator()),
+      error: (e, _) => Center(child: Text('加载失败: $e')),
+      data: (it) => _listBody(ref,
+          _filterItems(it, cat, filter, search).map((e) => _itemCard(e, ref)).toList()),
+    );
+  }
+
+  List<Walnut> _filterWalnuts(List<Walnut> all, String filter, String search) {
+    var l = all;
+    if (filter.isNotEmpty) l = l.where((w) => w.category == filter).toList();
+    if (search.isNotEmpty) {
+      final q = search.toLowerCase();
+      l = l
+          .where((w) =>
+              w.name.toLowerCase().contains(q) || w.category.toLowerCase().contains(q))
+          .toList();
+    }
+    return l;
+  }
+
+  List<Item> _filterItems(List<Item> all, String cat, String filter, String search) {
+    var l = cat == allCat ? all : all.where((e) => e.type == cat).toList();
+    if (filter.isNotEmpty) l = l.where((e) => e.category == filter).toList();
+    if (search.isNotEmpty) {
+      final q = search.toLowerCase();
+      l = l
+          .where((e) {
+            final name = e.name.isNotEmpty ? e.name : e.type;
+            return name.toLowerCase().contains(q) || e.category.toLowerCase().contains(q);
+          })
+          .toList();
+    }
+    return l;
+  }
+
+  Widget _listBody(WidgetRef ref, List<Widget> list) {
     if (list.isEmpty) {
       return Center(
         child: Text('这里还空空如也\n点击右上角「＋新增」添加第一件',
             textAlign: TextAlign.center,
-            style: TextStyle(
-                color: Tokens.muted, fontSize: Tokens.fsHint)),
+            style: TextStyle(color: Tokens.muted, fontSize: Tokens.fsHint)),
       );
     }
     return RefreshIndicator(
-      onRefresh: () async { refreshCollection(ref); },
+      onRefresh: () async {
+        refreshCollection(ref);
+      },
       color: Tokens.accent,
       child: ListView.separated(
         padding: const EdgeInsets.all(16),
@@ -378,72 +352,75 @@ class CollectionPage extends ConsumerWidget {
     );
   }
 
-  /// 过滤规则（照定稿原型 renderCards）：
-  /// 核桃 = 大品类 + 品种；其他 = 二级类型 + 材质
-  /// 注意：原型的 curCat 是持久状态，menuLv 只控制菜单收放——
-  /// 所以即使点「‹ 返回」收起到一级，列表仍按当前二级类型过滤，不可改成 lv==2 才过滤。
-  List<Widget> _buildList(WidgetRef ref, bool isWalnut, List<Walnut> wn, List<Item> it,
-      String group, String variety, String sub) {
-    if (isWalnut) {
-      var filtered = wn;
-      if (group.isNotEmpty) {
-        filtered = filtered.where((w) => w.category == group).toList();
-      }
-      if (variety.isNotEmpty) {
-        filtered = filtered.where((w) => w.variety == variety).toList();
-      }
-      return filtered.map((w) => _walnutCard(w, ref)).toList();
-    }
-    var filtered = it.where((e) => e.type == sub).toList();
-    if (group.isNotEmpty) {
-      filtered = filtered.where((e) => e.category == group).toList();
-    }
-    return filtered.map((i) => _itemCard(i, ref)).toList();
-  }
+  /// 卡片副标题：品类·品种（品种为空时只显品类）
+  String _sub(String cat, String var_) => var_.isEmpty ? cat : '$cat·$var_';
 
   Widget _walnutCard(Walnut w, WidgetRef ref) => Builder(builder: (ctx) {
         return SwipeReveal(
-      rowOnTap: () => Navigator.of(ctx).push(MaterialPageRoute(builder: (_) => WalnutDetailPage(w))),
-      actions: [
-        SwipeAction(icon: Icons.edit_outlined, label: '编辑', color: Tokens.accent,
-            onTap: () => _edit(ctx, ref, true, w)),
-        SwipeAction(icon: Icons.delete_outline, label: '删除', color: Tokens.badD10,
-            onTap: () => _confirmDelete(ctx, ref, isWalnut: true, id: w.id, name: w.name)),
-      ],
-      child: Stack(children: [
+          rowOnTap: () => Navigator.of(ctx)
+              .push(MaterialPageRoute(builder: (_) => WalnutDetailPage(w))),
+          actions: [
+            SwipeAction(
+                icon: Icons.edit_outlined,
+                label: '编辑',
+                color: Tokens.accent,
+                onTap: () => _edit(ctx, ref, true, w)),
+            SwipeAction(
+                icon: Icons.delete_outline,
+                label: '删除',
+                color: Tokens.badD10,
+                onTap: () => _confirmDelete(ctx, ref,
+                    isWalnut: true, id: w.id, name: w.name)),
+          ],
+          child: Stack(children: [
             NeumorphicBox(
-            radius: Tokens.rCard,
-            // 右侧留 34 给右上角的 ✎ 编辑按钮，避免压住名称/价格
-            padding: const EdgeInsets.fromLTRB(14, 14, 34, 14),
-            child: Row(
-              children: [
-                CoverThumb(rel: w.coverPath, size: 60),
-                const SizedBox(width: 14),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(w.name, style: TextStyle(fontSize: Tokens.fsBody, fontWeight: FontWeight.w600, color: Tokens.text)),
-                      const SizedBox(height: 4),
-                      Text('${w.category}·${w.variety}', style: TextStyle(fontSize: Tokens.fsHint, color: Tokens.muted)),
-                      const SizedBox(height: 6),
-                      Row(
-                        children: [
-                          Text(w.code, style: TextStyle(fontSize: Tokens.fsLabel, color: Tokens.faint)),
-                          const Spacer(),
-                          Text(formatPrice(w.price), style: TextStyle(fontSize: Tokens.fsBody, color: Tokens.accent, fontWeight: FontWeight.w700)),
-                        ],
-                      ),
-                      const SizedBox(height: 6),
-                      Wrap(spacing: 6, children: patinaTags(full: w.full, repaired: w.repaired, yellow: w.yellow)
-                          .map((t) => _tag(t)).toList()),
-                    ],
+              radius: Tokens.rCard,
+              padding: const EdgeInsets.fromLTRB(14, 14, 34, 14),
+              child: Row(
+                children: [
+                  CoverThumb(rel: w.coverPath, size: 60),
+                  const SizedBox(width: 14),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(w.name,
+                            style: TextStyle(
+                                fontSize: Tokens.fsBody,
+                                fontWeight: FontWeight.w600,
+                                color: Tokens.text)),
+                        const SizedBox(height: 4),
+                        Text(_sub(w.category, w.variety),
+                            style: TextStyle(fontSize: Tokens.fsHint, color: Tokens.muted)),
+                        const SizedBox(height: 6),
+                        Row(
+                          children: [
+                            Text(w.code,
+                                style: TextStyle(
+                                    fontSize: Tokens.fsLabel, color: Tokens.faint)),
+                            const Spacer(),
+                            Text(formatPrice(w.price),
+                                style: TextStyle(
+                                    fontSize: Tokens.fsBody,
+                                    color: Tokens.accent,
+                                    fontWeight: FontWeight.w700)),
+                          ],
+                        ),
+                        const SizedBox(height: 6),
+                        Wrap(
+                            spacing: 6,
+                            children: patinaTags(
+                                    full: w.full,
+                                    repaired: w.repaired,
+                                    yellow: w.yellow)
+                                .map((t) => _tag(t))
+                                .toList()),
+                      ],
+                    ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
-          ),
-            // CI 反馈 #7：卡片右上角直接编辑，不用右滑
             Positioned(top: 6, right: 6, child: _editBtn(ctx, ref, true, w)),
           ]),
         );
@@ -451,45 +428,63 @@ class CollectionPage extends ConsumerWidget {
 
   Widget _itemCard(Item i, WidgetRef ref) => Builder(builder: (ctx) {
         return SwipeReveal(
-      rowOnTap: () => Navigator.of(ctx).push(MaterialPageRoute(builder: (_) => ItemDetailPage(i))),
-      actions: [
-        SwipeAction(icon: Icons.edit_outlined, label: '编辑', color: Tokens.accent,
-            onTap: () => _edit(ctx, ref, false, i)),
-        SwipeAction(icon: Icons.delete_outline, label: '删除', color: Tokens.badD10,
-            onTap: () => _confirmDelete(ctx, ref, isWalnut: false, id: i.id,
-                name: i.name.isNotEmpty ? i.name : i.type)),
-      ],
-      child: Stack(children: [
+          rowOnTap: () => Navigator.of(ctx)
+              .push(MaterialPageRoute(builder: (_) => ItemDetailPage(i))),
+          actions: [
+            SwipeAction(
+                icon: Icons.edit_outlined,
+                label: '编辑',
+                color: Tokens.accent,
+                onTap: () => _edit(ctx, ref, false, i)),
+            SwipeAction(
+                icon: Icons.delete_outline,
+                label: '删除',
+                color: Tokens.badD10,
+                onTap: () => _confirmDelete(ctx, ref,
+                    isWalnut: false,
+                    id: i.id,
+                    name: i.name.isNotEmpty ? i.name : i.type)),
+          ],
+          child: Stack(children: [
             NeumorphicBox(
-            radius: Tokens.rCard,
-            // 右侧留 34 给右上角的 ✎ 编辑按钮
-            padding: const EdgeInsets.fromLTRB(14, 14, 34, 14),
-            child: Row(
-              children: [
-                CoverThumb(rel: i.coverPath, size: 60),
-                const SizedBox(width: 14),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(i.name.isNotEmpty ? i.name : i.type, style: TextStyle(fontSize: Tokens.fsBody, fontWeight: FontWeight.w600, color: Tokens.text)),
-                      const SizedBox(height: 4),
-                      Text('${i.category}·${i.variety}', style: TextStyle(fontSize: Tokens.fsHint, color: Tokens.muted)),
-                      const SizedBox(height: 6),
-                      Row(
-                        children: [
-                          Text(formatSize(i.sizeMm), style: TextStyle(fontSize: Tokens.fsLabel, color: Tokens.faint)),
-                          const Spacer(),
-                          Text(formatPrice(i.price), style: TextStyle(fontSize: Tokens.fsBody, color: Tokens.accent, fontWeight: FontWeight.w700)),
-                        ],
-                      ),
-                    ],
+              radius: Tokens.rCard,
+              padding: const EdgeInsets.fromLTRB(14, 14, 34, 14),
+              child: Row(
+                children: [
+                  CoverThumb(rel: i.coverPath, size: 60),
+                  const SizedBox(width: 14),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(i.name.isNotEmpty ? i.name : i.type,
+                            style: TextStyle(
+                                fontSize: Tokens.fsBody,
+                                fontWeight: FontWeight.w600,
+                                color: Tokens.text)),
+                        const SizedBox(height: 4),
+                        Text(_sub(i.category, i.variety),
+                            style: TextStyle(fontSize: Tokens.fsHint, color: Tokens.muted)),
+                        const SizedBox(height: 6),
+                        Row(
+                          children: [
+                            Text(formatSize(i.sizeMm),
+                                style: TextStyle(
+                                    fontSize: Tokens.fsLabel, color: Tokens.faint)),
+                            const Spacer(),
+                            Text(formatPrice(i.price),
+                                style: TextStyle(
+                                    fontSize: Tokens.fsBody,
+                                    color: Tokens.accent,
+                                    fontWeight: FontWeight.w700)),
+                          ],
+                        ),
+                      ],
+                    ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
-          ),
-            // CI 反馈 #7：卡片右上角直接编辑
             Positioned(top: 6, right: 6, child: _editBtn(ctx, ref, false, i)),
           ]),
         );
@@ -555,19 +550,28 @@ class CollectionPage extends ConsumerWidget {
     ref.invalidate(itemsProvider);
   }
 
-  void _openAdd(BuildContext context, WidgetRef ref, bool isWalnut) {
-    Navigator.of(context)
-        .push(MaterialPageRoute(
-          fullscreenDialog: true,
-          builder: (_) =>
-              isWalnut ? const AddWalnutSheet() : const AddItemSheet(),
-        ))
-        .then((_) => refreshCollection(ref));
+  void _openAdd(BuildContext context, WidgetRef ref) {
+    final cat = ref.read(collectionCatProvider);
+    if (cat == '核桃' || cat == allCat) {
+      Navigator.of(context)
+          .push(MaterialPageRoute(
+            fullscreenDialog: true,
+            builder: (_) => const AddWalnutSheet(),
+          ))
+          .then((_) => refreshCollection(ref));
+    } else {
+      Navigator.of(context)
+          .push(MaterialPageRoute(
+            fullscreenDialog: true,
+            builder: (_) => AddItemSheet(initialType: cat),
+          ))
+          .then((_) => refreshCollection(ref));
+    }
   }
 }
 
 /// 子菜单 tab：默认 NeuState.raised 凸起，on 时 color=accentSoft 加深（不用阴影切换），
-/// 按压 NeuState.pressed = inSm 凹陷 — 与「时间 ↓」（ctrl-sort）一致
+/// 按压 NeuState.pressed = inSm 凹陷
 class _PressableTab extends StatefulWidget {
   final String label;
   final bool on;
@@ -594,7 +598,7 @@ class _PressableTabState extends State<_PressableTab> {
         state: _pressed ? NeuState.pressed : NeuState.raised,
         radius: Tokens.rBtn,
         color: widget.on ? Tokens.accentSoft : Tokens.bg,
-        padding: const EdgeInsets.symmetric(vertical: 10),
+        padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 14),
         child: Center(
           child: Text(widget.label,
               style: TextStyle(
