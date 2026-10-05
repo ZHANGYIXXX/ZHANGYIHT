@@ -1,10 +1,14 @@
 name: Build APK
 
-# 云端编译（自诊断版 v4）
-# 关键：本工程代码按 Flutter 3.47 编写（见 .dart_tool/version = 3.47.2），
-# 早前用 3.24.5 编译时因 API 不存在而 Dart 编译失败
-#（:app:compileFlutterBuildRelease → flutter exit 1）。
-# 故改为跟随最新 stable（>= 3.47），并由同一版本重建 android 骨架保证一致。
+# 云端编译（自诊断版 v5 · 固定签名）
+# 关键：本工程代码按 Flutter 3.47 编写，故跟随最新 stable（>= 3.47），
+# 并由同一版本重建 android 骨架保证一致。
+#
+# 签名策略（修复「无法覆盖安装」）：
+# 旧版每次 CI 都重新生成临时 keystore，但 release 实际仍用 runner 自带 debug 签名
+# → 每次构建签名都不同 → 手机提示「必须卸载旧版才能安装」。
+# 现改为：仓库内提交一把【固定】 PKCS12 签名密钥（ci/release.p12.b64，base64 文本），
+# 每次构建都解出同一把密钥 → 所有出包签名完全一致 → 可直接覆盖安装。
 on:
   push:
     branches: [ main, master ]
@@ -27,7 +31,6 @@ jobs:
         uses: subosito/flutter-action@v2
         with:
           # 只给 channel，不给 flutter-version —— 表示"取最新稳定版"。
-          # 绝不能写 flutter-version: stable（该参数只认具体版本号，会直接失败）。
           channel: 'stable'
           cache: true
 
@@ -47,14 +50,16 @@ jobs:
           cp /tmp/pubspec_backup.yaml pubspec.yaml
           grep distributionUrl android/gradle/wrapper/gradle-wrapper.properties
 
-      - name: Inject camera and gallery permissions
+      - name: Inject camera and gallery permissions + app name
         run: |
-          sed -i 's|</manifest>|    <uses-permission android:name="android.permission.READ_MEDIA_IMAGES" />\n    <uses-permission android:name="android.permission.CAMERA" />\n</manifest>|' android/app/src/main/AndroidManifest.xml
+          sed -i 's|</manifest>|    <uses-permission android:name="android.permission.READ_MEDIA_IMAGES" />\n    <uses-permission android:name="android.permission.CAMERA" />\n    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" android:maxSdkVersion="28" />\n</manifest>|' android/app/src/main/AndroidManifest.xml
           grep "uses-permission" android/app/src/main/AndroidManifest.xml
+          # flutter create 会把 label 重置为 project-name(yizhanghe)，这里强制改回软件名
+          sed -i 's|android:label="yizhanghe"|android:label="ZHANGYIWW"|' android/app/src/main/AndroidManifest.xml
+          grep 'android:label' android/app/src/main/AndroidManifest.xml
 
       - name: Restore launcher icons
         # flutter create 会生成默认 Flutter logo 图标，必须从仓库 assets/icon/ 备份恢复「壹核 ZHANG」图标
-        # 5 个密度：mdpi/hdpi/xhdpi/xxhdpi/xxxhdpi；预生成 PNG 直接拷，无需 PIL
         run: |
           set -e
           for d in mdpi hdpi xhdpi xxhdpi xxxhdpi; do
@@ -63,6 +68,80 @@ jobs:
           echo "Restored launcher icons:"
           ls -la android/app/src/main/res/mipmap-*/ic_launcher.png
 
+      - name: Configure fixed release signing (same keystore for every build)
+        # 从仓库内 base64 还原同一把 PKCS12 密钥，保证所有出包签名完全一致，可直接覆盖安装。
+        run: |
+          set -e
+          base64 -d ci/release.p12.b64 > android/app/release.p12
+          ls -l android/app/release.p12
+          cat > android/key.properties <<'EOF'
+          storeFile=release.p12
+          storePassword=yizhanghe-release-2026
+          keyAlias=yizhanghe
+          keyPassword=yizhanghe-release-2026
+          storeType=pkcs12
+          EOF
+          cat android/key.properties
+          # 覆盖 flutter create 生成的默认 build.gradle.kts，改用上面的固定签名
+          cat > android/app/build.gradle.kts <<'KTS'
+          plugins {
+              id("com.android.application")
+              id("dev.flutter.flutter-gradle-plugin")
+          }
+
+          android {
+              namespace = "com.example.yizhanghe"
+              compileSdk = flutter.compileSdkVersion
+              ndkVersion = flutter.ndkVersion
+
+              compileOptions {
+                  sourceCompatibility = JavaVersion.VERSION_17
+                  targetCompatibility = JavaVersion.VERSION_17
+              }
+
+              defaultConfig {
+                  applicationId = "com.example.yizhanghe"
+                  minSdk = flutter.minSdkVersion
+                  targetSdk = flutter.targetSdkVersion
+                  versionCode = flutter.versionCode
+                  versionName = flutter.versionName
+              }
+
+              signingConfigs {
+                  create("release") {
+                      val keyPropsFile = rootProject.file("key.properties")
+                      if (keyPropsFile.exists()) {
+                          val props = java.util.Properties().apply { load(keyPropsFile.inputStream()) }
+                          storeFile = file(props["storeFile"] as String)
+                          storePassword = props["storePassword"] as String
+                          keyAlias = props["keyAlias"] as String
+                          keyPassword = props["keyPassword"] as String
+                          storeType = props["storeType"] as String? ?: "pkcs12"
+                      }
+                  }
+              }
+
+              buildTypes {
+                  release {
+                      signingConfig = signingConfigs.getByName("release")
+                      isMinifyEnabled = false
+                      isShrinkResources = false
+                  }
+              }
+          }
+
+          kotlin {
+              compilerOptions {
+                  jvmTarget = org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17
+              }
+          }
+
+          flutter {
+              source = "../.."
+          }
+          KTS
+          echo "build.gradle.kts written"
+
       - name: Accept Android licenses and install missing SDK packages
         run: |
           export ANDROID_SDK_ROOT="${ANDROID_SDK_ROOT:-$ANDROID_HOME}"
@@ -70,22 +149,6 @@ jobs:
           yes | flutter doctor --android-licenses 2>&1 | tee /tmp/licenses.log || true
           yes | sdkmanager --licenses 2>&1 | tee -a /tmp/licenses.log || true
           sdkmanager "platform-tools" "platforms;android-35" "build-tools;35.0.0" 2>&1 | tee -a /tmp/licenses.log || true
-
-      - name: Create temporary Android keystore
-        # -dname 必须给，否则 keytool 会交互式提示，CI 非交互环境无人应答 → 失败
-        run: |
-          set -o pipefail
-          keytool -genkeypair -v \
-            -keystore android/app/ci-release.keystore \
-            -alias ci \
-            -keyalg RSA \
-            -keysize 2048 \
-            -validity 10000 \
-            -dname "CN=CI Build, OU=Dev, O=Yizhang, L=Guiyang, ST=Guizhou, C=CN" \
-            -storepass android \
-            -keypass android 2>&1 | tee /tmp/keytool.log
-          printf 'storeFile=ci-release.keystore\nstorePassword=android\nkeyAlias=ci\nkeyPassword=android\n' > android/key.properties
-          cat android/key.properties
 
       - name: Get dependencies
         run: flutter pub get 2>&1 | tee /tmp/pubget.log
@@ -102,6 +165,11 @@ jobs:
             exit 1
           fi
           ls -la build/app/outputs/flutter-apk/app-release.apk
+
+      - name: Show APK signing info
+        # 自检：确认本次出包用的就是固定签名（alias=yizhanghe）
+        run: |
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose build/app/outputs/flutter-apk/app-release.apk 2>&1 | grep -i "signer" || true
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
