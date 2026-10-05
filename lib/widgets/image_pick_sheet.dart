@@ -44,11 +44,13 @@ Future<List<XFile>> pickImagesFromSheet(
 
   if (src == null) return const [];
   final picker = ImagePicker();
+  // 明确请求原图质量（imageQuality:100），不限制尺寸 → 不压缩、不降清晰度。
+  // 存储层 ImageStore.save 也是字节级 File.copy，整条链路零压缩。
   if (multiple) {
-    final xs = await picker.pickMultiImage();
+    final xs = await picker.pickMultiImage(imageQuality: 100);
     return xs;
   }
-  final one = await picker.pickImage(source: src);
+  final one = await picker.pickImage(source: src, imageQuality: 100);
   return one == null ? const [] : [one];
 }
 
