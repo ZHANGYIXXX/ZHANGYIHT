@@ -120,6 +120,8 @@ class _AppShellState extends ConsumerState<AppShell> {
       );
 }
 
+}
+
 /// 单个底栏按钮：默认凸起，active 用 accentSoft 加深（不用阴影切换），
 /// 按下时 NeuState.pressed = inSm 凹陷 — 与「时间 ↓」触感一致
 class _NavItem extends StatefulWidget {
