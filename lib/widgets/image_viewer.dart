@@ -54,11 +54,15 @@ class _ZoomableImageState extends State<ZoomableImage> {
 
   @override
   Widget build(BuildContext context) => LayoutBuilder(builder: (c, cons) {
-        return GestureDetector(
-          onDoubleTap: () => _toggle(Size(cons.maxWidth, cons.maxHeight)),
-          child: InteractiveViewer(
-            transformationController: _tc,
-            maxScale: 5,
+        return InteractiveViewer(
+          transformationController: _tc,
+          minScale: 1,
+          maxScale: 5,
+          panEnabled: true,
+          scaleEnabled: true,
+          child: GestureDetector(
+            behavior: HitTestBehavior.translucent,
+            onDoubleTap: () => _toggle(Size(cons.maxWidth, cons.maxHeight)),
             child: Center(
               child: Image.file(File(widget.path), fit: BoxFit.contain),
             ),
