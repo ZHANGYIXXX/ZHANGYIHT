@@ -64,7 +64,8 @@ class _ZoomableImageState extends State<ZoomableImage> {
             behavior: HitTestBehavior.translucent,
             onDoubleTap: () => _toggle(Size(cons.maxWidth, cons.maxHeight)),
             child: Center(
-              child: Image.file(File(widget.path), fit: BoxFit.contain),
+              child: Image.file(File(widget.path),
+                  fit: BoxFit.contain, filterQuality: FilterQuality.high),
             ),
           ),
         );
