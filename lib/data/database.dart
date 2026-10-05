@@ -1,5 +1,6 @@
 import 'dart:io';
 import 'package:sqflite/sqflite.dart';
+import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 
@@ -14,6 +15,11 @@ class AppDatabase {
   }
 
   static Future<Database> _init() async {
+    // V2：Windows 桌面端用 FFI 实现（sqflite 本体仅支持 Android/iOS）
+    if (Platform.isWindows) {
+      sqfliteFfiInit();
+      databaseFactory = databaseFactoryFfi;
+    }
     final base = await getApplicationDocumentsDirectory();
     final dbDir = Directory(p.join(base.path, 'yizhanghe'));
     await dbDir.create(recursive: true); // 确保 yizhanghe/ 存在

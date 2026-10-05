@@ -8,6 +8,7 @@ import '../../theme/nu.dart';
 import '../../logic/theme.dart';
 import '../../data/database.dart';
 import '../../logic/providers.dart';
+import 'nas_sync_page.dart';
 
 class SettingsPage extends ConsumerWidget {
   const SettingsPage({super.key});
@@ -28,6 +29,17 @@ class SettingsPage extends ConsumerWidget {
         const SizedBox(height: 10),
         GestureDetector(onTap: () => _import(context, ref), child: NeumorphicBox(state: NeuState.inset, radius: Tokens.rBtn,
             padding: const EdgeInsets.symmetric(vertical: 14), child: Center(child: Text('导入数据库 + 原图（恢复备份）', style: TextStyle(color: Tokens.seal, fontWeight: FontWeight.w700))))),
+      ]),
+      const SizedBox(height: 16),
+      _block('NAS 同步（V2）', [
+        Text('把收藏数据单向备份到极空间 Z2PRO（本地优先、原图不压缩）。首次使用请先完成配置。',
+            style: TextStyle(color: Tokens.muted, fontSize: Tokens.fsHint)),
+        const SizedBox(height: 12),
+        GestureDetector(
+          onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const NasSyncPage())),
+          child: NeumorphicBox(state: NeuState.raised, radius: Tokens.rBtn,
+              padding: const EdgeInsets.symmetric(vertical: 14), child: Center(child: Text('NAS 同步设置', style: TextStyle(color: Tokens.accent, fontWeight: FontWeight.w700)))),
+        ),
       ]),
       const SizedBox(height: 16),
       _block('关于', [

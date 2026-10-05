@@ -1,25 +1,16 @@
-name: Build APK
+name: Build V2 (Android + Windows)
 
-# 云端编译（v6 · 固定签名 · 修复华为/HarmonyOS 打开即闪退）
-# 关键修复：AGP 9.0 会把原生库(.so)按 DEFLATE 压缩进 APK，华为/HarmonyOS 的 linker
-# 无法直接加载压缩的 .so → 安装成功但打开即闪退（进程直接死亡、无红屏）。
-# 本流程在 flutter build 之后，用 ci/uncompress_so.py 把 .so 重新打包为不压缩(STORE)，
-# 再 zipalign 对齐 + 用同一把固定密钥重签，彻底规避该问题。
-# 关键：本工程代码按 Flutter 3.47 编写，故跟随最新 stable（>= 3.47），
-# 并由同一版本重建 android 骨架保证一致。
-#
-# 签名策略（修复「无法覆盖安装」）：
-# 旧版每次 CI 都重新生成临时 keystore，但 release 实际仍用 runner 自带 debug 签名
-# → 每次构建签名都不同 → 手机提示「必须卸载旧版才能安装」。
-# 现改为：仓库内提交一把【固定】 PKCS12 签名密钥（ci/release.p12.b64，base64 文本），
-# 每次构建都解出同一把密钥 → 所有出包签名完全一致 → 可直接覆盖安装。
+# 云端编译 v7（V2）：双端出包
+#  - job android: 修复版 APK（固定签名 + .so 不压缩 + 启动自检，沿用 V1 验证过的流程）
+#  - job windows: PC 端免安装 zip（sqflite_common_ffi + 自带 sqlite3.dll）
+# 触发：push 到 v2 / main / master，或手动 workflow_dispatch
 on:
   push:
-    branches: [ main, master ]
+    branches: [ main, master, v2 ]
   workflow_dispatch:
 
 jobs:
-  build:
+  android:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -34,7 +25,6 @@ jobs:
       - name: Set up Flutter
         uses: subosito/flutter-action@v2
         with:
-          # 只给 channel，不给 flutter-version —— 表示"取最新稳定版"。
           channel: 'stable'
           cache: true
 
@@ -49,25 +39,29 @@ jobs:
           cp lib/main.dart /tmp/main_backup.dart
           cp pubspec.yaml /tmp/pubspec_backup.yaml
           rm -rf android
-          flutter create --platforms=android --org com.yizhanghe --project-name yizhanghe . 2>&1 | tee /tmp/create.log
+          # 关键：--org com.example 使生成的 Kotlin 包 = com.example.yizhanghe，
+          # 与 build.gradle.kts 的 namespace/applicationId 完全一致。
+          # 此前用 com.yizhanghe 导致 dex 类名 com.yizhanghe.yizhanghe.MainActivity
+          # 与 Manifest 声明 com.example.yizhanghe.MainActivity 不一致
+          # → ClassNotFoundException → 打开即闪退（安装正常、CI 全绿但无法启动）。
+          flutter create --platforms=android --org com.example --project-name yizhanghe . 2>&1 | tee /tmp/create.log
           cp /tmp/main_backup.dart lib/main.dart
           cp /tmp/pubspec_backup.yaml pubspec.yaml
           grep distributionUrl android/gradle/wrapper/gradle-wrapper.properties
+          # 断言：MainActivity 包名必须等于 namespace，否则构建必闪退
+          set -e
+          grep -q "^package com.example.yizhanghe$" android/app/src/main/kotlin/com/example/yizhanghe/MainActivity.kt
+          echo "MainActivity package OK: com.example.yizhanghe"
 
       - name: Inject camera and gallery permissions + app name
         run: |
-          sed -i 's|</manifest>|    <uses-permission android:name="android.permission.READ_MEDIA_IMAGES" />\n    <uses-permission android:name="android.permission.CAMERA" />\n    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" android:maxSdkVersion="28" />\n</manifest>|' android/app/src/main/AndroidManifest.xml
+          sed -i 's|</manifest>|    <uses-permission android:name="android.permission.READ_MEDIA_IMAGES" />\n    <uses-permission android:name="android.permission.CAMERA" />\n    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" android:maxsdkversion="28" />\n</manifest>|' android/app/src/main/AndroidManifest.xml
           grep "uses-permission" android/app/src/main/AndroidManifest.xml
           # flutter create 会把 label 重置为 project-name(yizhanghe)，这里强制改回软件名
           sed -i 's|android:label="yizhanghe"|android:label="ZHANGYIWW"|' android/app/src/main/AndroidManifest.xml
           grep 'android:label' android/app/src/main/AndroidManifest.xml
-          # 关键修复：强制原生库安装时解压（配合 build.gradle.kts 的 useLegacyPackaging=true），
-          # 规避华为/HarmonyOS ART 直接加载压缩 .so 导致的打开即闪退。
-          sed -i 's|android:icon="@mipmap/ic_launcher">|android:icon="@mipmap/ic_launcher" android:extractNativeLibs="true">|' android/app/src/main/AndroidManifest.xml
-          grep 'extractNativeLibs' android/app/src/main/AndroidManifest.xml
 
       - name: Restore launcher icons
-        # flutter create 会生成默认 Flutter logo 图标，必须从仓库 assets/icon/ 备份恢复「壹核 ZHANG」图标
         run: |
           set -e
           for d in mdpi hdpi xhdpi xxhdpi xxxhdpi; do
@@ -77,10 +71,8 @@ jobs:
           ls -la android/app/src/main/res/mipmap-*/ic_launcher.png
 
       - name: Configure fixed release signing (same keystore for every build)
-        # 从仓库内 base64 还原同一把 PKCS12 密钥，保证所有出包签名完全一致，可直接覆盖安装。
         run: |
           set -e
-          # 去除可能的 \r（Windows/CRLF 会让 base64 -d 报 invalid input），再解码
           tr -d '\r' < ci/release.p12.b64 | base64 -d > android/app/release.p12
           ls -l android/app/release.p12
           cat > android/key.properties <<'EOF'
@@ -91,7 +83,7 @@ jobs:
           storeType=pkcs12
           EOF
           cat android/key.properties
-          # 覆盖 flutter create 生成的默认 build.gradle.kts，改用上面的固定签名
+          # 覆盖 flutter create 生成的默认 build.gradle.kts，改用固定签名 + .so 不压缩
           cat > android/app/build.gradle.kts <<'KTS'
           plugins {
               id("com.android.application")
@@ -103,8 +95,7 @@ jobs:
               compileSdk = flutter.compileSdkVersion
               ndkVersion = flutter.ndkVersion
 
-              // 关键修复：华为/HarmonyOS 的 ART 无法直接从 APK 加载「压缩」的 .so，
-              // 会导致 libflutter.so 加载失败、打开即闪退。useLegacyPackaging=true 让原生库安装时解压，规避该问题。
+              // 华为/HarmonyOS linker 无法加载压缩 .so → 打开即闪退。
               packaging {
                   jniLibs {
                       useLegacyPackaging = true
@@ -125,9 +116,6 @@ jobs:
               }
 
               signingConfigs {
-                  // 固定签名：仓库内 ci/release.p12.b64 解码得到 release.p12（同一步骤已写入 android/app/）。
-                  // 直接硬编码已知常量，避免 AGP 9.0 / Gradle Kotlin DSL 脚本里 java.util.Properties 无法解析的问题。
-                  // 所有出包统一使用同一把固定签名 → 手机可直接覆盖安装，无需卸载旧版。
                   create("release") {
                       storeFile = file("release.p12")
                       storePassword = "yizhanghe-release-2026"
@@ -156,9 +144,6 @@ jobs:
               source = "../.."
           }
 
-          // 双保险：Flutter 插件会在配置期把 useLegacyPackaging 强制为 false，
-          // 导致 AGP 合并 manifest 时写入 extractNativeLibs=false（原生库压缩、直接由 APK 加载），
-          // 华为/HarmonyOS ART 无法加载 → 打开即闪退。用 variant API 钉死为 true 修复。
           androidComponents {
               onVariants { variant ->
                   variant.packaging.jniLibs.useLegacyPackaging.set(true)
@@ -192,9 +177,6 @@ jobs:
           ls -la build/app/outputs/flutter-apk/app-release.apk
 
       - name: Force uncompressed native libs + align + re-sign (fix Huawei launch crash)
-        # 1) AGP 9.0 把 .so 压缩进 APK，华为/HarmonyOS linker 加载不了 → 打开即闪退。
-        #    用 ci/uncompress_so.py 把 lib/**/*.so 重新打包为不压缩(STORE)，linker 可直接 mmap 加载。
-        # 2) 重新打包会破坏原签名，必须 zipalign 对齐后，用【同一把固定密钥】重新签名。
         run: |
           set -e
           python3 ci/uncompress_so.py build/app/outputs/flutter-apk/app-release.apk
@@ -210,7 +192,7 @@ jobs:
             --out build/app/outputs/flutter-apk/app-release-signed.apk \
             build/app/outputs/flutter-apk/app-release-aligned.apk
           cp build/app/outputs/flutter-apk/app-release-signed.apk build/app/outputs/flutter-apk/app-release.apk
-          echo "=== .so compression after fix (应为空 = 全部不压缩) ==="
+          echo "=== .so compression after fix ==="
           python3 - <<'PY'
           import zipfile
           z=zipfile.ZipFile("build/app/outputs/flutter-apk/app-release.apk")
@@ -220,6 +202,24 @@ jobs:
           echo "=== signing verify ==="
           "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose build/app/outputs/flutter-apk/app-release.apk 2>&1 | grep -i "signer"
 
+      - name: Static launch self-check (manifest activity == dex class)
+        run: |
+          set -e
+          APK=build/app/outputs/flutter-apk/app-release.apk
+          LAUNCH=$("$ANDROID_HOME/build-tools/35.0.0/aapt2" dump badging "$APK" | grep -oP "launchable-activity: name='\K[^']+")
+          echo "launchable-activity: $LAUNCH"
+          rm -rf /tmp/dexck && mkdir -p /tmp/dexck && cd /tmp/dexck
+          unzip -o -q "$GITHUB_WORKSPACE/$APK" 'classes*.dex'
+          FOUND=0
+          for d in classes*.dex; do
+            if "$ANDROID_HOME/build-tools/35.0.0/dexdump" "$d" | grep -q "L${LAUNCH//./\/};"; then FOUND=1; fi
+          done
+          if [ "$FOUND" != "1" ]; then
+            echo "::error::launchable-activity '$LAUNCH' NOT FOUND in dex — app would crash on launch!"
+            exit 1
+          fi
+          echo "launch self-check PASSED: $LAUNCH exists in dex"
+
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
@@ -228,7 +228,6 @@ jobs:
           if-no-files-found: error
 
       - name: Report failure details
-        # 兜底：任何步骤失败都上报。重点抓 Dart 编译错误行（lib/...: Error: ...）
         if: failure()
         run: |
           {
@@ -249,3 +248,77 @@ jobs:
             DART=$(tail -30 /tmp/build.log 2>/dev/null | tr '\n' ' ' | cut -c1-2500)
           fi
           echo "::error title=Build failed::${DART}"
+
+  windows:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: 'stable'
+          cache: true
+
+      - name: Show environment
+        shell: pwsh
+        run: |
+          flutter --version
+          flutter doctor -v
+
+      - name: Get dependencies
+        run: flutter pub get
+
+      - name: Regenerate windows scaffold (repo has no windows/ dir)
+        shell: pwsh
+        run: |
+          Copy-Item lib/main.dart $env:TEMP\main_backup.dart
+          Copy-Item pubspec.yaml $env:TEMP\pubspec_backup.yaml
+          flutter create --platforms=windows --org com.example --project-name yizhanghe . 2>&1 | Tee-Object $env:TEMP\create.log
+          Copy-Item $env:TEMP\main_backup.dart lib/main.dart -Force
+          Copy-Item $env:TEMP\pubspec_backup.yaml pubspec.yaml -Force
+          # 应用名：flutter create 默认 yizhanghe → 改成 ZHANGYIWW
+          $rc = "windows\runner\Runner.rc"
+          (Get-Content $rc) -replace 'yizhanghe', 'ZHANGYIWW' | Set-Content $rc
+          $rw = "windows\runner\main.cpp"
+          if (Test-Path $rw) { (Get-Content $rw) -replace 'yizhanghe', 'ZHANGYIWW' | Set-Content $rw }
+          Get-Content $rc | Select-String "AppName|yizhanghe|ZHANGYIWW"
+
+      - name: Build Windows release
+        shell: pwsh
+        run: flutter build windows --release
+
+      - name: Bundle sqlite3.dll for sqflite_ffi
+        shell: pwsh
+        run: |
+          # sqflite_common_ffi 需要 sqlite3.dll；优先从 pub 缓存的 sqlite3 包取，
+          # 找不到就下载官方预编译 dll（x64）
+          $dst = "build\windows\x64\runner\Release"
+          $src = Get-ChildItem "$env:LOCALAPPDATA\Pub\Cache" -Recurse -Filter "sqlite3.dll" -ErrorAction SilentlyContinue | Select-Object -First 1
+          if ($src) {
+            Copy-Item $src.FullName "$dst\sqlite3.dll" -Force
+            Write-Host "sqlite3.dll bundled from pub cache"
+          } else {
+            $url = "https://www.sqlite.org/2026/sqlite-dll-win-x64-3500200.zip"
+            $tmp = "$env:TEMP\sq.zip"
+            Invoke-WebRequest -Uri $url -OutFile $tmp
+            Expand-Archive -Path $tmp -DestinationPath "$env:TEMP\sq" -Force
+            Copy-Item "$env:TEMP\sq\sqlite3.dll" "$dst\sqlite3.dll" -Force
+            Write-Host "sqlite3.dll downloaded"
+          }
+          Get-ChildItem $dst | Select-Object Name,Length
+
+      - name: Package portable zip
+        shell: pwsh
+        run: |
+          $rel = "build\windows\x64\runner\Release"
+          Compress-Archive -Path "$rel\*" -DestinationPath "ZHANGYIWW-PC-portable.zip" -Force
+          Get-Item "ZHANGYIWW-PC-portable.zip" | Select-Object Name,Length
+
+      - name: Upload Windows zip
+        uses: actions/upload-artifact@v4
+        with:
+          name: ZHANGYIWW-PC-portable
+          path: ZHANGYIWW-PC-portable.zip
+          if-no-files-found: error

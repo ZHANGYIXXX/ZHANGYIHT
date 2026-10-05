@@ -14,6 +14,7 @@ Future<void> main() async {
     final saved = await loadTheme();
     applyTheme(saved);
     // 首次安装：把台账里已有的核桃先建好档（只跑一次）
+    // V2：Windows 上 AppDatabase._init 内部会自动切换 sqflite_ffi 工厂，无需额外引导
     await Seed.runIfNeeded();
     runApp(
       ProviderScope(
