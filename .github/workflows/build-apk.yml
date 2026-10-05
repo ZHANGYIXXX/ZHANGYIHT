@@ -49,10 +49,19 @@ jobs:
           cp lib/main.dart /tmp/main_backup.dart
           cp pubspec.yaml /tmp/pubspec_backup.yaml
           rm -rf android
-          flutter create --platforms=android --org com.yizhanghe --project-name yizhanghe . 2>&1 | tee /tmp/create.log
+          # 关键：--org com.example 使生成的 Kotlin 包 = com.example.yizhanghe，
+          # 与 build.gradle.kts 的 namespace/applicationId 完全一致。
+          # 此前用 com.yizhanghe 导致 dex 类名 com.yizhanghe.yizhanghe.MainActivity
+          # 与 Manifest 声明的 com.example.yizhanghe.MainActivity 不一致
+          # → ClassNotFoundException → 打开即闪退（安装正常、CI 全绿但无法启动）。
+          flutter create --platforms=android --org com.example --project-name yizhanghe . 2>&1 | tee /tmp/create.log
           cp /tmp/main_backup.dart lib/main.dart
           cp /tmp/pubspec_backup.yaml pubspec.yaml
           grep distributionUrl android/gradle/wrapper/gradle-wrapper.properties
+          # 断言：MainActivity 包名必须等于 namespace，否则构建必闪退
+          set -e
+          grep -q "^package com.example.yizhanghe$" android/app/src/main/kotlin/com/example/yizhanghe/MainActivity.kt
+          echo "MainActivity package OK: com.example.yizhanghe"
 
       - name: Inject camera and gallery permissions + app name
         run: |
@@ -219,6 +228,26 @@ jobs:
           PY
           echo "=== signing verify ==="
           "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose build/app/outputs/flutter-apk/app-release.apk 2>&1 | grep -i "signer"
+
+      - name: Static launch self-check (manifest activity == dex class)
+        # 终检：badging 的 launchable-activity 必须能在 dex 里找到同名类。
+        # 历史教训：namespace 与 Kotlin 包不一致 → ClassNotFoundException → 秒退（CI 却全绿）。
+        run: |
+          set -e
+          APK=build/app/outputs/flutter-apk/app-release.apk
+          LAUNCH=$("$ANDROID_HOME/build-tools/35.0.0/aapt2" dump badging "$APK" | grep -oP "launchable-activity: name='\K[^']+")
+          echo "launchable-activity: $LAUNCH"
+          rm -rf /tmp/dexck && mkdir -p /tmp/dexck && cd /tmp/dexck
+          unzip -o -q "$GITHUB_WORKSPACE/$APK" 'classes*.dex'
+          FOUND=0
+          for d in classes*.dex; do
+            if "$ANDROID_HOME/build-tools/35.0.0/dexdump" "$d" | grep -q "L${LAUNCH//./\/};"; then FOUND=1; fi
+          done
+          if [ "$FOUND" != "1" ]; then
+            echo "::error::launchable-activity '$LAUNCH' NOT FOUND in dex — app would crash on launch!"
+            exit 1
+          fi
+          echo "launch self-check PASSED: $LAUNCH exists in dex"
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
