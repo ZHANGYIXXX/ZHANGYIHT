@@ -151,6 +151,13 @@ jobs:
           flutter {
               source = "../.."
           }
+
+          // 双保险：Flutter 插件会在配置期把 useLegacyPackaging 强制为 false，
+          // 导致 AGP 合并 manifest 时写入 extractNativeLibs=false（原生库压缩、直接由 APK 加载），
+          // 华为/HarmonyOS ART 无法加载 → 打开即闪退。afterEvaluate 再钉死为 true 修复。
+          afterEvaluate {
+              android.packaging.jniLibs.useLegacyPackaging = true
+          }
           KTS
           echo "build.gradle.kts written"
 
