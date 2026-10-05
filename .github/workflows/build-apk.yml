@@ -57,6 +57,10 @@ jobs:
           # flutter create 会把 label 重置为 project-name(yizhanghe)，这里强制改回软件名
           sed -i 's|android:label="yizhanghe"|android:label="ZHANGYIWW"|' android/app/src/main/AndroidManifest.xml
           grep 'android:label' android/app/src/main/AndroidManifest.xml
+          # 关键修复：强制原生库安装时解压（配合 build.gradle.kts 的 useLegacyPackaging=true），
+          # 规避华为/HarmonyOS ART 直接加载压缩 .so 导致的打开即闪退。
+          sed -i 's|android:icon="@mipmap/ic_launcher">|android:icon="@mipmap/ic_launcher" android:extractNativeLibs="true">|' android/app/src/main/AndroidManifest.xml
+          grep 'extractNativeLibs' android/app/src/main/AndroidManifest.xml
 
       - name: Restore launcher icons
         # flutter create 会生成默认 Flutter logo 图标，必须从仓库 assets/icon/ 备份恢复「壹核 ZHANG」图标
@@ -94,6 +98,14 @@ jobs:
               namespace = "com.example.yizhanghe"
               compileSdk = flutter.compileSdkVersion
               ndkVersion = flutter.ndkVersion
+
+              // 关键修复：华为/HarmonyOS 的 ART 无法直接从 APK 加载「压缩」的 .so，
+              // 会导致 libflutter.so 加载失败、打开即闪退。useLegacyPackaging=true 让原生库安装时解压，规避该问题。
+              packaging {
+                  jniLibs {
+                      useLegacyPackaging = true
+                  }
+              }
 
               compileOptions {
                   sourceCompatibility = JavaVersion.VERSION_17
