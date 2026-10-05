@@ -107,7 +107,7 @@ class SettingsPage extends ConsumerWidget {
       final base = await getApplicationDocumentsDirectory();
       final src = Directory(p.join(base.path, 'yizhanghe'));
       if (!await src.exists()) { _toast(context, '还没有任何数据'); return; }
-      final dl = await getExternalStorageDirectory() ?? await getApplicationDocumentsDirectory();
+      final dl = await _backupBase();
       final ts = DateTime.now();
       final stamp = '${ts.year}${ts.month.toString().padLeft(2, '0')}${ts.day.toString().padLeft(2, '0')}-${ts.hour.toString().padLeft(2, '0')}${ts.minute.toString().padLeft(2, '0')}';
       final dest = Directory(p.join(dl.path, '壹ZHANG核备份', stamp));
@@ -170,14 +170,42 @@ class SettingsPage extends ConsumerWidget {
     }
   }
 
-  // 备份根目录：与导出写到同一处（外部存储优先，回退到文档目录）
+  // 备份基目录（跨平台）：Windows=「下载」文件夹；Android=外部存储；其余=文档目录。
+  // 注意：getExternalStorageDirectory 在 Windows 上是直接 throw UnimplementedError
+  //（报错文案即 getExternalStoragePath() has not been implemented），不是返回 null，
+  // 所以 ?? 兜底无效，必须 try/catch。
+  Future<Directory> _backupBase() async {
+    if (Platform.isWindows) {
+      final home = Platform.environment['USERPROFILE'];
+      if (home != null) {
+        final dl = Directory(p.join(home, 'Downloads'));
+        if (await dl.exists()) return dl;
+      }
+    }
+    if (Platform.isAndroid) {
+      try {
+        final ext = await getExternalStorageDirectory();
+        if (ext != null) return ext;
+      } catch (_) {}
+    }
+    return getApplicationDocumentsDirectory();
+  }
+
+  // 备份根目录：与导出写到同一处（Windows=下载，Android=外部存储，回退文档目录）
   Future<Directory?> _backupRoot() async {
-    final candidates = <Directory?>[
-      await getExternalStorageDirectory(),
-      await getApplicationDocumentsDirectory(),
-    ];
+    final candidates = <Directory>[];
+    if (Platform.isWindows) {
+      final home = Platform.environment['USERPROFILE'];
+      if (home != null) candidates.add(Directory(p.join(home, 'Downloads')));
+    }
+    if (Platform.isAndroid) {
+      try {
+        final d = await getExternalStorageDirectory();
+        if (d != null) candidates.add(d);
+      } catch (_) {}
+    }
+    candidates.add(await getApplicationDocumentsDirectory());
     for (final d in candidates) {
-      if (d == null) continue;
       final r = Directory(p.join(d.path, '壹ZHANG核备份'));
       if (await r.exists()) return r;
     }

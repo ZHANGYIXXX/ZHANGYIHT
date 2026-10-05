@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:io';
+import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import '../data/image_store.dart';
@@ -28,6 +29,7 @@ class _CoverCarouselState extends State<CoverCarousel> {
   List<String> _abs = [];
   bool _loaded = false;
   int _idx = 0;
+  double? _aspect; // 首图宽高比（宽/高），用于自适应高度让整图可见
 
   @override
   void initState() {
@@ -51,9 +53,24 @@ class _CoverCarouselState extends State<CoverCarousel> {
         if (File(p).existsSync()) out.add(p);
       } catch (_) {}
     }
+    // 取首图宽高比（小尺寸解码，省内存），用于把轮播高度撑到整图可见：
+    // PC 宽窗口下固定 210 高 + BoxFit.cover 会把图裁成中间一条横带
+    double? aspect;
+    if (out.isNotEmpty) {
+      try {
+        final codec = await ui.instantiateImageCodec(
+          await File(out.first).readAsBytes(),
+          targetWidth: 64,
+        );
+        final frame = await codec.getNextFrame();
+        aspect = frame.image.width / frame.image.height;
+        codec.dispose();
+      } catch (_) {}
+    }
     if (!mounted) return;
     setState(() {
       _abs = out;
+      _aspect = aspect;
       _loaded = true;
       if (_idx >= out.length) _idx = 0;
     });
@@ -94,12 +111,25 @@ class _CoverCarouselState extends State<CoverCarousel> {
         ),
       );
     }
-    return SizedBox(
-      height: widget.height,
+    return LayoutBuilder(builder: (context, cons) {
+      // 高度自适应：最少 widget.height；按首图宽高比撑到整图可见，封顶 480。
+      // 手机端几乎等于原效果；PC 宽窗口不再把图裁成一条。
+      double h = widget.height;
+      final a = _aspect;
+      if (a != null && a > 0 && cons.maxWidth.isFinite) {
+        final raw = cons.maxWidth / a;
+        h = raw < widget.height
+            ? widget.height
+            : (raw > 480.0 ? 480.0 : raw);
+      }
+      return SizedBox(
+      height: h,
       width: double.infinity,
       child: ClipRRect(
         borderRadius: BorderRadius.circular(16),
         child: Stack(children: [
+          // BoxFit.contain 留白处露出卡片底色
+          Positioned.fill(child: ColoredBox(color: Tokens.ph1)),
           PageView.builder(
             controller: _pc,
             itemCount: _abs.length,
@@ -108,8 +138,8 @@ class _CoverCarouselState extends State<CoverCarousel> {
               onTap: () => _open(i),
               child: Image.file(File(_abs[i]),
                   width: double.infinity,
-                  height: widget.height,
-                  fit: BoxFit.cover),
+                  height: h,
+                  fit: BoxFit.contain),
             ),
           ),
           if (_abs.length > 1)
@@ -137,7 +167,8 @@ class _CoverCarouselState extends State<CoverCarousel> {
             ),
         ]),
       ),
-    );
+      );
+    });
   }
 
   Widget _box({required Widget child}) => Container(
