@@ -27,7 +27,7 @@ class ItemDetailPage extends ConsumerWidget {
           child: ListView(padding: const EdgeInsets.all(16), children: [
             NeumorphicBox(radius: Tokens.rCard, padding: const EdgeInsets.all(16), child:
               Row(children: [
-                _cover(), // 点封面看大图（CI 反馈 #2）
+                _cover(context), // 点封面看大图（CI 反馈 #2）
                 const SizedBox(width: 16),
                 Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                   Text(it.name.isNotEmpty ? it.name : it.type, style: TextStyle(fontSize: Tokens.fsEmph, fontWeight: FontWeight.bold, color: Tokens.text)),
@@ -64,7 +64,7 @@ class ItemDetailPage extends ConsumerWidget {
       );
 
   /// 封面：点开全屏大图（CI 反馈 #2 —— 之前点了没反应）
-  Widget _cover() => FutureBuilder<List<String>>(
+  Widget _cover(BuildContext context) => FutureBuilder<List<String>>(
         future: resolvePaths([it.coverPath]),
         builder: (c, s) {
           final abs = s.data ?? const <String>[];
