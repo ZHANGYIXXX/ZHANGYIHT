@@ -66,4 +66,12 @@ class AppDatabase {
       },
     );
   }
+
+  // 导入备份前关闭句柄：覆盖 app.db 文件后由 instance 重新打开读取新库
+  static Future<void> close() async {
+    if (_db != null) {
+      await _db!.close();
+      _db = null;
+    }
+  }
 }
