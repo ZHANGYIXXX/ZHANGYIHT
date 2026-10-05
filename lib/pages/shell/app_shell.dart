@@ -40,7 +40,7 @@ class _AppShellState extends ConsumerState<AppShell> {
 
   @override
   Widget build(BuildContext context) {
-    // 瑞鹤图主题：整幅《瑞鹤图》压到 10% 透明度做绢本底纹（可读性优先，不抢内容）
+    // 瑞鹤图主题：整幅《瑞鹤图》做清晰可见的绢本底纹背景（0.45 透明度，兼顾可读性）
     final crane = ref.watch(themeProvider) == ThemeKey.crane;
     return PopScope(
         canPop: false,
@@ -54,7 +54,7 @@ class _AppShellState extends ConsumerState<AppShell> {
           if (crane)
             Positioned.fill(
               child: Opacity(
-                opacity: 0.10,
+                opacity: 0.45,
                 child: Image.asset('assets/theme/ruihetu.jpg',
                     fit: BoxFit.cover, alignment: Alignment.topCenter),
               ),
