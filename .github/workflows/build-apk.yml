@@ -55,7 +55,7 @@ jobs:
 
       - name: Inject camera and gallery permissions + app name
         run: |
-          sed -i 's|</manifest>|    <uses-permission android:name="android.permission.READ_MEDIA_IMAGES" />\n    <uses-permission android:name="android.permission.CAMERA" />\n    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" android:maxsdkversion="28" />\n</manifest>|' android/app/src/main/AndroidManifest.xml
+          sed -i 's|</manifest>|    <uses-permission android:name="android.permission.READ_MEDIA_IMAGES" />\n    <uses-permission android:name="android.permission.CAMERA" />\n    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" android:maxSdkVersion="28" />\n</manifest>|' android/app/src/main/AndroidManifest.xml
           grep "uses-permission" android/app/src/main/AndroidManifest.xml
           # flutter create 会把 label 重置为 project-name(yizhanghe)，这里强制改回软件名
           sed -i 's|android:label="yizhanghe"|android:label="ZHANGYIWW"|' android/app/src/main/AndroidManifest.xml
@@ -292,29 +292,35 @@ jobs:
       - name: Bundle sqlite3.dll for sqflite_ffi
         shell: pwsh
         run: |
-          # sqflite_common_ffi 需要 sqlite3.dll；优先从 pub 缓存取，
-          # 找不到再动态解析 sqlite.org 最新预编译 dll（不再硬编码版本/年份，避免 404）
+          # sqflite_common_ffi 需要 sqlite3.dll。优先用仓库内置官方预编译 dll（ci/sqlite3.dll），
+          # 不再依赖 sqlite.org 在线解析（其下载页用 JS 动态拼链接，正则爬不到会直接 throw）。
           $dst = "build\windows\x64\runner\Release"
           if (-not (Test-Path $dst)) { New-Item -ItemType Directory -Force -Path $dst | Out-Null }
 
-          $src = Get-ChildItem "$env:LOCALAPPDATA\Pub\Cache" -Recurse -Filter "sqlite3.dll" -ErrorAction SilentlyContinue | Select-Object -First 1
-          if ($src) {
-            Copy-Item $src.FullName "$dst\sqlite3.dll" -Force
-            Write-Host "sqlite3.dll bundled from pub cache: $($src.FullName)"
+          $repoDll = "ci\sqlite3.dll"
+          if (Test-Path $repoDll) {
+            Copy-Item $repoDll "$dst\sqlite3.dll" -Force
+            Write-Host "sqlite3.dll bundled from repo ($repoDll)"
           } else {
-            Write-Host "pub cache 中无 sqlite3.dll，转从 sqlite.org 动态解析最新 x64 预编译包..."
-            $html = (Invoke-WebRequest -Uri "https://www.sqlite.org/download.html" -UseBasicParsing).Content
-            $m = [regex]::Match($html, 'href="(\.\./)?(\d{4})/sqlite-dll-win-x64-(\d+)\.zip"')
-            if (-not $m.Success) { throw "未能从 sqlite.org/download.html 解析到 sqlite-dll-win-x64 链接" }
-            $year = $m.Groups[2].Value
-            $ver = $m.Groups[3].Value
-            $url = "https://www.sqlite.org/$year/sqlite-dll-win-x64-$ver.zip"
-            Write-Host "解析到下载链接: $url"
-            $tmp = "$env:TEMP\sq.zip"
-            Invoke-WebRequest -Uri $url -OutFile $tmp
-            Expand-Archive -Path $tmp -DestinationPath "$env:TEMP\sq" -Force
-            Copy-Item "$env:TEMP\sq\sqlite3.dll" "$dst\sqlite3.dll" -Force
-            Write-Host "sqlite3.dll downloaded ($ver)"
+            $src = Get-ChildItem "$env:LOCALAPPDATA\Pub\Cache" -Recurse -Filter "sqlite3.dll" -ErrorAction SilentlyContinue | Select-Object -First 1
+            if ($src) {
+              Copy-Item $src.FullName "$dst\sqlite3.dll" -Force
+              Write-Host "sqlite3.dll bundled from pub cache: $($src.FullName)"
+            } else {
+              Write-Host "repo/pub 中均无 sqlite3.dll，转从 sqlite.org 动态解析最新 x64 预编译包..."
+              $html = (Invoke-WebRequest -Uri "https://www.sqlite.org/download.html" -UseBasicParsing).Content
+              $m = [regex]::Match($html, 'href="(\.\./)?(\d{4})/sqlite-dll-win-x64-(\d+)\.zip"')
+              if (-not $m.Success) { throw "未能从 sqlite.org/download.html 解析到 sqlite-dll-win-x64 链接" }
+              $year = $m.Groups[2].Value
+              $ver = $m.Groups[3].Value
+              $url = "https://www.sqlite.org/$year/sqlite-dll-win-x64-$ver.zip"
+              Write-Host "解析到下载链接: $url"
+              $tmp = "$env:TEMP\sq.zip"
+              Invoke-WebRequest -Uri $url -OutFile $tmp
+              Expand-Archive -Path $tmp -DestinationPath "$env:TEMP\sq" -Force
+              Copy-Item "$env:TEMP\sq\sqlite3.dll" "$dst\sqlite3.dll" -Force
+              Write-Host "sqlite3.dll downloaded ($ver)"
+            }
           }
 
           # 断言：缺 dll 出包必闪退，提前 fail 而非带病出包
