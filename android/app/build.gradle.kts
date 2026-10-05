@@ -8,6 +8,15 @@ android {
     compileSdk = flutter.compileSdkVersion
     ndkVersion = flutter.ndkVersion
 
+    // 关键修复：华为/HarmonyOS 的 ART 无法直接从 APK 加载「压缩」的 .so，
+    // 会导致 libflutter.so 加载失败、打开即闪退（进程直接死亡，无红屏）。
+    // useLegacyPackaging=true 让原生库安装时解压到 app 私有目录，规避该问题；对其他机型无副作用。
+    packaging {
+        jniLibs {
+            useLegacyPackaging = true
+        }
+    }
+
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
