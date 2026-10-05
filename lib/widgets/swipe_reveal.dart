@@ -6,12 +6,12 @@ class SwipeAction {
   final IconData icon;
   final String label;
   final VoidCallback onTap;
-  final Color color;
+  final Color? color;
   SwipeAction(
       {required this.icon,
       required this.label,
       required this.onTap,
-      this.color = Tokens.accent});
+      this.color});
 }
 
 /// 列表行左滑露出快捷操作。
@@ -110,7 +110,7 @@ class _SwipeRevealState extends State<SwipeReveal>
                               a.onTap();
                             },
                             child: Container(
-                              color: a.color,
+                              color: a.color ?? Tokens.accent,
                               alignment: Alignment.center,
                               child: Column(
                                 mainAxisAlignment: MainAxisAlignment.center,
