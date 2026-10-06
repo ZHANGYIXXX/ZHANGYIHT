@@ -37,3 +37,14 @@ flutter:
     - assets/icon/source.png
     - assets/theme/ruihetu.jpg
     - assets/seed/walnuts.json
+
+# sqlite3（由 sqflite_common_ffi 传递引入，仅 Windows 端实际使用）的
+# build hook 会为所有目标平台（含 arm64 Android）下载预编译 libsqlite3.so，
+# 默认地址在 GitHub，国内直连必然超时（实测 HTTP 000 / 21s无响应）。
+# url_pattern 支持 $RELEASE_TAG 与 $FILENAME 占位符，改为国内镜像。
+# 注意 $RELEASE_TAG 本身已含 sqlite3- 前缀，不要重复拼接。
+# 实测 gh-proxy.com 明显更快（1.1s / 7.9s），ghfast.top 可作备选。
+hooks:
+  user_defines:
+    sqlite3:
+      url_pattern: https://gh-proxy.com/https://github.com/simolus3/sqlite3.dart/releases/download/$RELEASE_TAG/$FILENAME
