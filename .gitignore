@@ -48,3 +48,6 @@ app.*.map.json
 
 # Widget Preview related
 .widget_preview/
+
+# 本地 GitHub PAT 凭证，禁止入库（2026-10-06）
+ci/token.txt
