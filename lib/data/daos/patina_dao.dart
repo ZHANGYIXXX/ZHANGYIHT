@@ -7,23 +7,33 @@ class PatinaDao {
     return db.insert('patina', p.toMap());
   }
 
-  static Future<List<Patina>> byWalnut(int walnutId) async {
+  /// 按 owner 取走色（评审意见 8.4 泛化）：owner_type + owner_id
+  static Future<List<Patina>> byOwner(String type, int ownerId) async {
     final db = await AppDatabase.instance;
     final rows = await db.query('patina',
-        where: 'walnut_id = ?', whereArgs: [walnutId], orderBy: 'date DESC');
+        where: 'owner_type = ? AND owner_id = ?',
+        whereArgs: [type, ownerId],
+        orderBy: 'date DESC');
     return rows.map(Patina.fromMap).toList();
   }
+
+  /// 按核桃便捷封装（历史调用兼容）
+  static Future<List<Patina>> byWalnut(int walnutId) =>
+      byOwner('walnut', walnutId);
 
   static Future<int> delete(int id) async {
     final db = await AppDatabase.instance;
     return db.delete('patina', where: 'id = ?', whereArgs: [id]);
   }
 
-  /// 删某件核桃的全部走色记录。
-  /// 建表时虽写了 ON DELETE CASCADE，但 SQLite 默认 foreign_keys=OFF，
-  /// 级联不会生效，必须显式删，否则留下孤儿行。
-  static Future<int> deleteByWalnut(int walnutId) async {
+  /// 按 owner 删走色（评审意见 8.4 泛化）
+  static Future<int> deleteByOwner(String type, int ownerId) async {
     final db = await AppDatabase.instance;
-    return db.delete('patina', where: 'walnut_id = ?', whereArgs: [walnutId]);
+    return db.delete('patina',
+        where: 'owner_type = ? AND owner_id = ?', whereArgs: [type, ownerId]);
   }
+
+  /// 按核桃便捷封装（历史调用兼容）
+  static Future<int> deleteByWalnut(int walnutId) =>
+      deleteByOwner('walnut', walnutId);
 }

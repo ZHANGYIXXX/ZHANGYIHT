@@ -8,7 +8,7 @@ import '../../theme/nu.dart';
 import '../../logic/theme.dart';
 import '../../data/database.dart';
 import '../../logic/providers.dart';
-import 'nas_sync_page.dart';
+import '../../logic/router.dart';
 
 class SettingsPage extends ConsumerWidget {
   const SettingsPage({super.key});
@@ -36,7 +36,7 @@ class SettingsPage extends ConsumerWidget {
             style: TextStyle(color: Tokens.muted, fontSize: Tokens.fsHint)),
         const SizedBox(height: 12),
         GestureDetector(
-          onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const NasSyncPage())),
+          onTap: () => AppRouter.toNasSync(context),
           child: NeumorphicBox(state: NeuState.raised, radius: Tokens.rBtn,
               padding: const EdgeInsets.symmetric(vertical: 14), child: Center(child: Text('NAS 同步设置', style: TextStyle(color: Tokens.accent, fontWeight: FontWeight.w700)))),
         ),

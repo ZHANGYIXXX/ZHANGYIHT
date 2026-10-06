@@ -10,10 +10,7 @@ import '../../data/models/walnut.dart';
 import '../../data/models/item.dart';
 import '../../widgets/cover_thumb.dart';
 import '../../widgets/swipe_reveal.dart';
-import 'walnut_detail_page.dart';
-import 'item_detail_page.dart';
-import 'add_walnut_sheet.dart';
-import 'add_item_sheet.dart';
+import '../../logic/router.dart';
 
 class CollectionPage extends ConsumerStatefulWidget {
   const CollectionPage({super.key});
@@ -357,8 +354,7 @@ class _CollectionPageState extends ConsumerState<CollectionPage> {
 
   Widget _walnutCard(Walnut w, WidgetRef ref) => Builder(builder: (ctx) {
         return SwipeReveal(
-          rowOnTap: () => Navigator.of(ctx)
-              .push(MaterialPageRoute(builder: (_) => WalnutDetailPage(w.id!))),
+          rowOnTap: () => AppRouter.toWalnutDetail(ctx, w.id!),
           actions: [
             SwipeAction(
                 icon: Icons.edit_outlined,
@@ -428,8 +424,7 @@ class _CollectionPageState extends ConsumerState<CollectionPage> {
 
   Widget _itemCard(Item i, WidgetRef ref) => Builder(builder: (ctx) {
         return SwipeReveal(
-          rowOnTap: () => Navigator.of(ctx)
-              .push(MaterialPageRoute(builder: (_) => ItemDetailPage(i.id!))),
+          rowOnTap: () => AppRouter.toItemDetail(ctx, i.id!),
           actions: [
             SwipeAction(
                 icon: Icons.edit_outlined,
@@ -515,13 +510,9 @@ class _CollectionPageState extends ConsumerState<CollectionPage> {
 
   /// 编辑：打开全屏新增页并预填，保存即覆盖原记录（CI 反馈 #1 全屏）
   void _edit(BuildContext ctx, WidgetRef ref, bool isWalnut, dynamic record) {
-    Navigator.of(ctx)
-        .push(MaterialPageRoute(
-          fullscreenDialog: true,
-          builder: (_) => isWalnut
-              ? AddWalnutSheet(editWalnut: record as Walnut)
-              : AddItemSheet(editItem: record as Item),
-        ))
+    (isWalnut
+            ? AppRouter.toEditWalnut(ctx, record as Walnut)
+            : AppRouter.toEditItem(ctx, record as Item))
         .then((_) => refreshCollection(ref));
   }
 
@@ -553,19 +544,9 @@ class _CollectionPageState extends ConsumerState<CollectionPage> {
   void _openAdd(BuildContext context, WidgetRef ref) {
     final cat = ref.read(collectionCatProvider);
     if (cat == '核桃' || cat == allCat) {
-      Navigator.of(context)
-          .push(MaterialPageRoute(
-            fullscreenDialog: true,
-            builder: (_) => const AddWalnutSheet(),
-          ))
-          .then((_) => refreshCollection(ref));
+      AppRouter.toAddWalnut(context).then((_) => refreshCollection(ref));
     } else {
-      Navigator.of(context)
-          .push(MaterialPageRoute(
-            fullscreenDialog: true,
-            builder: (_) => AddItemSheet(initialType: cat),
-          ))
-          .then((_) => refreshCollection(ref));
+      AppRouter.toAddItem(context, cat).then((_) => refreshCollection(ref));
     }
   }
 }

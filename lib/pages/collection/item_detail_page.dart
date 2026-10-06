@@ -1,7 +1,6 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:image_picker/image_picker.dart';
 import '../../theme/tokens.dart';
 import '../../theme/nu.dart';
 import '../../logic/providers.dart';
@@ -10,7 +9,7 @@ import '../../logic/delete_helper.dart';
 import '../../data/models/item.dart';
 import '../../widgets/cover_thumb.dart';
 import '../../widgets/cover_carousel.dart';
-import '../../widgets/image_viewer.dart';
+import '../../logic/router.dart';
 
 /// 其他类（手串/吊坠/手把件/摆件）详情页。
 /// 评审意见 P0 第一层：只收 id，经 itemByIdProvider 按 id 取数，与核桃详情页统一。
@@ -89,10 +88,7 @@ class ItemDetailPage extends ConsumerWidget {
           final abs = s.data ?? const <String>[];
           if (abs.isEmpty) return CoverThumb(rel: it.coverPath, size: 84);
           return GestureDetector(
-            onTap: () => Navigator.of(context).push(MaterialPageRoute(
-              builder: (_) => ImageViewer(
-                  files: abs.map((p) => XFile(p)).toList(), initial: 0),
-            )),
+            onTap: () => AppRouter.toImageViewer(context, abs, 0),
             child: ClipRRect(
               borderRadius: BorderRadius.circular(12),
               child: Image.file(File(abs[0]),
