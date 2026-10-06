@@ -27,7 +27,7 @@ class AppDatabase {
     return openDatabase(
       path,
       // v2：补 item.name —— 其他类此前只有输入框没有列，填了的名称会丢
-      version: 2,
+      version: 3,
       // SQLite 默认关闭外键约束，不打开的话 patina 表的 ON DELETE CASCADE
       // 根本不生效，删核桃会留下孤儿走色记录。
       onConfigure: (db) async => db.execute('PRAGMA foreign_keys = ON'),
@@ -36,6 +36,16 @@ class AppDatabase {
         if (oldVersion < 2) {
           await db.execute(
               "ALTER TABLE item ADD COLUMN name TEXT NOT NULL DEFAULT ''");
+        }
+        // 评审意见 8.4：patina 表泛化，支持绑定核桃以外的实体（如手串）。
+        // 旧 walnut_id 行回填 owner_id；保留 walnut_id 列以维持外键级联删。
+        if (oldVersion < 3) {
+          await db.execute(
+              "ALTER TABLE patina ADD COLUMN owner_type TEXT NOT NULL DEFAULT 'walnut'");
+          await db.execute(
+              "ALTER TABLE patina ADD COLUMN owner_id INTEGER");
+          await db.execute(
+              "UPDATE patina SET owner_id = walnut_id WHERE owner_type = 'walnut' AND walnut_id IS NOT NULL");
         }
       },
       onCreate: (db, version) async {
@@ -55,6 +65,8 @@ class AppDatabase {
           CREATE TABLE patina (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             walnut_id INTEGER,
+            owner_type TEXT NOT NULL DEFAULT 'walnut',
+            owner_id INTEGER,
             date TEXT,
             images TEXT,
             FOREIGN KEY (walnut_id) REFERENCES walnut(id) ON DELETE CASCADE

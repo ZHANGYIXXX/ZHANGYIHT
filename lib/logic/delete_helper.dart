@@ -9,7 +9,7 @@ import '../data/image_store.dart';
 class DeleteHelper {
   /// 删核桃：走色记录 → 走色图目录 → 封面图目录 → 主记录
   static Future<void> walnut(int id) async {
-    await PatinaDao.deleteByWalnut(id);
+    await PatinaDao.deleteByOwner('walnut', id);
     await ImageStore.deleteDir('patina', id);
     await ImageStore.deleteDir('walnut', id);
     await WalnutDao.delete(id);
@@ -17,6 +17,7 @@ class DeleteHelper {
 
   /// 删其他类：封面图目录 → 主记录
   static Future<void> item(int id) async {
+    await PatinaDao.deleteByOwner('item', id);
     await ImageStore.deleteDir('item', id);
     await ItemDao.delete(id);
   }

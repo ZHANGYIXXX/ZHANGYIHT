@@ -17,8 +17,21 @@ final walnutByIdProvider =
     FutureProvider.family<Walnut?, int>((ref, id) => WalnutDao.get(id));
 final itemByIdProvider =
     FutureProvider.family<Item?, int>((ref, id) => ItemDao.get(id));
-final patinaByWalnutProvider = FutureProvider.family<List<Patina>, int>(
-    (ref, walnutId) => PatinaDao.byWalnut(walnutId));
+// 双参 key：owner_type + owner_id（评审意见 8.4 patina 泛化）
+class OwnerRef {
+  final String type;
+  final int id;
+  const OwnerRef(this.type, this.id);
+  @override
+  bool operator ==(Object other) =>
+      other is OwnerRef && other.type == type && other.id == id;
+  @override
+  int get hashCode => Object.hash(type, id);
+}
+
+// 按 owner 取走色（P0 第一层 + 8.4）：详情页传 OwnerRef('walnut', id)
+final patinaByOwnerProvider = FutureProvider.family<List<Patina>, OwnerRef>(
+    (ref, k) => PatinaDao.byOwner(k.type, k.id));
 
 // 一级分类 tab：'全部' / '核桃' / '手串' / '吊坠' / '手把件' / '摆件'
 final collectionCatProvider = StateProvider<String>((ref) => allCat);

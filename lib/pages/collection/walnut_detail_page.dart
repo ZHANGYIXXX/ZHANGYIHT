@@ -1,7 +1,6 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:image_picker/image_picker.dart';
 import '../../theme/tokens.dart';
 import '../../theme/nu.dart';
 import '../../logic/providers.dart';
@@ -10,9 +9,7 @@ import '../../data/models/walnut.dart';
 import '../../data/models/patina.dart';
 import '../../logic/delete_helper.dart';
 import '../../widgets/cover_carousel.dart';
-import '../../widgets/image_viewer.dart';
-import 'add_patina_page.dart';
-import 'add_walnut_sheet.dart';
+import '../../logic/router.dart';
 
 /// 身份卡（CI 反馈 #6 对齐定稿原型）：
 /// 顶部图片自动流转 → 名称/编号/盘玩天数 → 价格 → 六面尺寸 → 重量
@@ -27,7 +24,7 @@ class WalnutDetailPage extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final walnut = ref.watch(walnutByIdProvider(id));
-    final patinae = ref.watch(patinaByWalnutProvider(id));
+    final patinae = ref.watch(patinaByOwnerProvider(OwnerRef('walnut', id)));
     return walnut.when(
       loading: () => _frame(const Center(child: CircularProgressIndicator())),
       error: (e, _) => _frame(Center(child: Text('加载失败: $e'))),
@@ -344,29 +341,20 @@ class WalnutDetailPage extends ConsumerWidget {
 
   /// 走色图/封面：点开全屏大图（CI 反馈 #2 —— 核心诉求）
   void _openAbs(BuildContext context, List<String> abs, int i) {
-    Navigator.of(context).push(MaterialPageRoute(
-      builder: (_) => ImageViewer(
-          files: abs.map((p) => XFile(p)).toList(), initial: i),
-    ));
+    AppRouter.toImageViewer(context, abs, i);
   }
 
   Future<void> _addPatina(BuildContext context, WidgetRef ref, Walnut w) async {
-    final ok = await Navigator.of(context).push<bool>(MaterialPageRoute(
-      fullscreenDialog: true,
-      builder: (_) => AddPatinaPage(walnutId: w.id!),
-    ));
-    if (ok == true) ref.invalidate(patinaByWalnutProvider(id));
+    final ok = await AppRouter.toAddPatina(context, w.id!);
+    if (ok == true) ref.invalidate(patinaByOwnerProvider(OwnerRef('walnut', id)));
   }
 
   Future<void> _edit(BuildContext context, WidgetRef ref, Walnut w) async {
-    await Navigator.of(context).push(MaterialPageRoute(
-      fullscreenDialog: true,
-      builder: (_) => AddWalnutSheet(editWalnut: w),
-    ));
+    await AppRouter.toEditWalnut(context, w);
     // 刷新列表（返回列表即时生效）+ 按 id 重新取数，根除 B4 编辑后旧值
     refreshCollection(ref);
     ref.invalidate(walnutByIdProvider(id));
-    ref.invalidate(patinaByWalnutProvider(id));
+    ref.invalidate(patinaByOwnerProvider(OwnerRef('walnut', id)));
   }
 
   void _confirmDelete(BuildContext context, WidgetRef ref, Walnut w) {

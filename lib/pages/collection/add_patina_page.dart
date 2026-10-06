@@ -195,8 +195,8 @@ class _AddPatinaPageState extends ConsumerState<AddPatinaPage> {
     for (final f in _pics) {
       rels.add(await ImageStore.save('patina', widget.walnutId, File(f.path)));
     }
-    await PatinaDao.insert(
-        Patina(walnutId: widget.walnutId, date: date, images: rels));
+    await PatinaDao.insert(Patina(
+        ownerType: 'walnut', ownerId: widget.walnutId, date: date, images: rels));
     refreshCollection(ref);
     if (!mounted) return;
     Navigator.pop(context, true);

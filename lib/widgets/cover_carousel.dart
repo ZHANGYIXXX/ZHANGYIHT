@@ -5,7 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import '../data/image_store.dart';
 import '../theme/tokens.dart';
-import 'image_viewer.dart';
+import '../../logic/router.dart';
 
 /// 身份卡顶部图片自动流转（CI 反馈 #6）：封面 + 走色图一起轮播，每 4 秒切一张。
 /// 点任意一张 → 打开全屏大图（可左右滑、可缩放）。
@@ -190,89 +190,11 @@ class _CoverCarouselState extends State<CoverCarousel> {
       );
 
   void _open(int i) {
-    Navigator.of(context).push(MaterialPageRoute(
-      builder: (_) => _CarouselViewer(files: _abs, initial: i),
-    ));
+    AppRouter.toImageViewer(context, _abs, i);
   }
 }
 
-/// 轮播大图查看：直接用绝对路径（已落盘的原图）
-class _CarouselViewer extends StatefulWidget {
-  final List<String> files;
-  final int initial;
-  const _CarouselViewer({required this.files, this.initial = 0});
-
-  @override
-  State<_CarouselViewer> createState() => _CarouselViewerState();
-}
-
-class _CarouselViewerState extends State<_CarouselViewer> {
-  late int _idx = widget.initial.clamp(0, widget.files.length - 1);
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: Colors.black,
-      body: Stack(children: [
-        PageView.builder(
-          controller: PageController(initialPage: _idx),
-          itemCount: widget.files.length,
-          onPageChanged: (i) => setState(() => _idx = i),
-          itemBuilder: (_, i) => ZoomableImage(path: widget.files[i]),
-        ),
-        Positioned(
-          top: MediaQuery.of(context).padding.top + 12,
-          left: 0,
-          right: 0,
-          child: Center(
-            child: Text('${_idx + 1} / ${widget.files.length}',
-                style: const TextStyle(color: Colors.white70, fontSize: 13)),
-          ),
-        ),
-        Positioned(
-          top: MediaQuery.of(context).padding.top + 6,
-          right: 12,
-          child: InkWell(
-            onTap: () => Navigator.pop(context),
-            child: Container(
-              padding: const EdgeInsets.all(8),
-              decoration: BoxDecoration(
-                color: Colors.white12,
-                borderRadius: BorderRadius.circular(20),
-              ),
-              child: const Icon(Icons.close, color: Colors.white, size: 20),
-            ),
-          ),
-        ),
-        // 保存到手机相册（当前这一张）
-        Positioned(
-          bottom: MediaQuery.of(context).padding.bottom + 24,
-          left: 0,
-          right: 0,
-          child: Center(
-            child: InkWell(
-              onTap: () => saveImageToGallery(context, widget.files[_idx]),
-              child: Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
-                decoration: BoxDecoration(
-                  color: Colors.white12,
-                  borderRadius: BorderRadius.circular(22),
-                ),
-                child: const Row(mainAxisSize: MainAxisSize.min, children: [
-                  Icon(Icons.save_alt, color: Colors.white, size: 18),
-                  SizedBox(width: 6),
-                  Text('保存到手机',
-                      style: TextStyle(color: Colors.white, fontSize: 14)),
-                ]),
-              ),
-            ),
-          ),
-        ),
-      ]),
-    );
-  }
-}
+// _CarouselViewer 已移除：轮播大图复用 ImageViewer（见 AppRouter.toImageViewer）
 
 /// 把相对路径批量解析为绝对路径（详情页/大图复用）
 Future<List<String>> resolvePaths(List<String> rels) async {
