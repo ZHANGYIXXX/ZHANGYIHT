@@ -300,7 +300,7 @@ class _AddItemSheetState extends ConsumerState<AddItemSheet> {
         GestureDetector(
           onTap: () {
             if (has) {
-              _preview([cur!], 0);
+              _preview([cur], 0);
             } else {
               _pickCover();
             }

@@ -2,7 +2,6 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:gal/gal.dart';
 import 'package:image_picker/image_picker.dart';
-import '../theme/tokens.dart';
 
 /// 把一张图存进手机相册（壹诉求：明年翻到走色图觉得好，能直接存到手机）。
 /// Android 10+ 走 MediaStore 不需要存储权限；iOS 需要在 Info.plist 声明（本工程只出 Android 包）。
