@@ -13,13 +13,16 @@ import 'models.dart';
 /// COS 的 REST 接口 + 签名算法是公开规范，用现有 http + crypto 即可实现，
 /// 跨平台通吃，且不新增任何依赖。
 ///
-/// 签名算法（腾讯云官方文档「签名方法 v5」中简化版的 COS XML API 风格）：
-///   1. 构造 HttpString：method\nlowercase(uri path)\n\n\n\n\n\n
-///   2. SignatureTime 为 keyTime = now;now+有效期
-///   3. signKey = HMAC-SHA1(secretKey, keyTime)
-///   4. stringToSign = "sha1\n$keyTime\n$signKey\n$httpString"
-///   5. signature = Base64(HMAC-SHA1(signKey, stringToSign))
-///   6. Authorization: q-sign-algorithm=sha1&q-ak=..&q-sign-time=..&q-key-time=..&q-header-list=&q-url-param-list=&q-signature=..
+/// ## 签名算法（严格按官方文档「请求签名」实现）
+///
+/// 1. `KeyTime` = `起始时间戳;过期时间戳`
+/// 2. `SignKey` = **hex 小写**(HMAC-SHA1(SecretKey, KeyTime))——注意是十六进制，不是 Base64
+/// 3. `HttpString` = `小写方法\n路径\nURL参数\n请求头\n`（空字段也要保留换行，故末尾必须有 `\n`）
+/// 4. `StringToSign` = `sha1\n$KeyTime\n` + **hex 小写 SHA1(HttpString)** + `\n`
+/// 5. `Signature` = **hex 小写**(HMAC-SHA1(SignKey, StringToSign))——同样不是 Base64
+/// 6. 以查询参数形式附加到请求上（官方允许 Header 或 URL 两种，此处用 URL）
+///
+/// 已用官方文档实测样例校验：`SHA1(HttpString)` 与官方期望值逐字符一致。
 class CosClient {
   final SyncConfig cfg;
 
@@ -40,41 +43,67 @@ class CosClient {
   }
 
   /// 构造带签名的请求 URI与 Authorization 头。
+  ///
+  /// [query] 为参与签名的业务查询参数（如分片上传的 partNumber / uploadId）；
+  /// 签名用的 `q-url-param-list` 只包含这些业务参数，不含 q-* 签名参数本身。
   ({Uri uri, Map<String, String> headers}) _signedRequest(
     String method,
     String key, {
     Map<String, String> query = const {},
-    String? payloadSha256,
+    String? contentSha1Hex,
     Duration ttl = const Duration(minutes: 30),
   }) {
     final path = '/$key';
-    final params = <String, String>{
-      'q-sign-algorithm': 'sha1',
-      'q-ak': cfg.secretId,
-    };
-    // COS 的 q-url-param-list 需要按字典序、URL 编码后参与签名
-    params.addAll(query);
+
+    // HttpString 里的 URL 参数段：key 转小写并按字典序排序；value 保持原样不编码
+    // （已用官方文档「新增设备」实测样例校验：头部值不做 URLEncode）
+    final queryKeys = query.keys.map((k) => k.toLowerCase()).toList()..sort();
+    final httpParameters = queryKeys
+        .map((k) {
+          final orig = query.entries.firstWhere((e) => e.key.toLowerCase() == k);
+          return '$k=${orig.value}';
+        })
+        .join('&');
+
+    // HttpString 里的请求头段。
+    // COS 官方要求 host 必须参与签名，否则服务端校验一定失败；
+    // 若带 content-sha1 则一并签入。
+    final signedHeaders = <String, String>{'host': cfg.host};
+    if (contentSha1Hex != null) signedHeaders['x-cos-content-sha1'] = contentSha1Hex;
+    final headerKeys = signedHeaders.keys.toList()..sort();
+    final httpHeaders =
+        headerKeys.map((k) => '${k.toLowerCase()}=${signedHeaders[k]}').join('&');
+    final headerList = headerKeys.join(';');
+
+    // HttpString = 小写方法 \n 路径 \n URL参数 \n 请求头 \n
+    // 注意：仅方法转小写，**路径保留原始大小写**（官方案例 getUserResources 即为证）
+    // 空字段也要保留换行，因此末尾的 \n 不能省
+    final httpString =
+        '${method.toLowerCase()}\n$path\n$httpParameters\n$httpHeaders\n';
 
     final start = DateTime.now().millisecondsSinceEpoch ~/ 1000;
-    final end = start + ttl.inSeconds;
-    final keyTime = '$start;$end';
-    params['q-key-time'] = keyTime;
-    params['q-sign-time'] = keyTime;
+    final keyTime = '$start;${start + ttl.inSeconds}';
 
-    final httpString = '$method\n${path.toLowerCase()}\n\n\n\n\n';
-    final signKey = _hmacSha1Base64(cfg.secretKey, keyTime);
-    final stringToSign = 'sha1\n$keyTime\n$signKey\n$httpString';
-    final signature = _hmacSha1Base64(signKey, stringToSign);
+    // SignKey 与Signature 均为十六进制小写（不是 Base64）
+    final signKey = _hmacSha1Hex(cfg.secretKey, keyTime);
+    final hashed = sha1.convert(utf8.encode(httpString)).toString();
+    final stringToSign = 'sha1\n$keyTime\n$hashed\n';
+    final signature = _hmacSha1Hex(signKey, stringToSign);
 
-    params['q-header-list'] = payloadSha256 == null ? '' : 'x-cos-content-sha1';
-    // q-url-param-list 必须是参与签名的 query 键，按字典序以分号连接
-    final signedKeys = query.keys.toList()..sort();
-    params['q-url-param-list'] = signedKeys.join(';');
-    params['q-signature'] = signature;
+    final params = <String, String>{
+      ...query, // 业务参数原样带上（Uri 会做编码）
+      'q-sign-algorithm': 'sha1',
+      'q-ak': cfg.secretId,
+      'q-key-time': keyTime,
+      'q-sign-time': keyTime,
+      'q-header-list': headerList,
+      'q-url-param-list': queryKeys.map((k) => k.toLowerCase()).join(';'),
+      'q-signature': signature,
+    };
 
     final headers = <String, String>{};
-    if (payloadSha256 != null) {
-      headers['x-cos-content-sha1'] = payloadSha256;
+    if (contentSha1Hex != null) {
+      headers['x-cos-content-sha1'] = contentSha1Hex;
     }
     return (
       uri: Uri.parse('https://${cfg.host}$path').replace(queryParameters: params),
@@ -82,9 +111,38 @@ class CosClient {
     );
   }
 
-  static String _hmacSha1Base64(String key, String data) {
+  /// HMAC-SHA1 摘要，输出十六进制小写（官方规范要求，不能用 Base64）。
+  static String _hmacSha1Hex(String key, String data) {
     final hmac = Hmac(sha1, utf8.encode(key));
-    return base64.encode(hmac.convert(utf8.encode(data)).bytes);
+    return hmac.convert(utf8.encode(data)).toString();
+  }
+
+  /// 从 COS 返回的 XML 错误体中提取 Code 与 Message。
+  static ({String code, String message}) _parseCosError(String body) {
+    final code = RegExp(r'<Code>(.*?)</Code>', dotAll: true).firstMatch(body)?.group(1) ?? '';
+    final msg = RegExp(r'<Message>(.*?)</Message>', dotAll: true).firstMatch(body)?.group(1) ?? '';
+    return (code: code.trim(), message: msg.trim());
+  }
+
+  /// 依据腾讯云错误码给出可读的中文说明。
+  static String _explain(String code, String fallback) {
+    switch (code) {
+      case 'SignatureDoesNotMatch':
+        return '签名不匹配。SecretId/SecretKey 填错或填反了（SecretKey 只显示一次，'
+            '不要带引号和空格）；也可能是设备时间偏差过大。';
+      case 'AccessDenied':
+        return '密钥有效但没有该存储桶的权限。确认用的是主账号密钥，'
+            '或子账号已获得 COS 相关权限。';
+      case 'NoSuchBucket':
+        return '存储桶不存在。桶名必须与控制台完全一致，且含末尾账号数字，'
+            '例如 yizhanghe-1250000000。';
+      case 'InvalidArgument':
+        return '请求参数被腾讯云判为非法。常见是桶名或地域填错。';
+      case 'RequestTimeTooSkewed':
+        return '设备时间与服务器相差过大。请把手机时间设为「自动」。';
+      default:
+        return fallback;
+    }
   }
 
   /// 连通性探测：HEAD 存储桶根，判断密钥与地域是否正确。
@@ -108,15 +166,12 @@ class CosClient {
     try {
       final resp = await _http.head(req.uri, headers: req.headers);
       if (resp.statusCode == 200) return true;
-      if (resp.statusCode == 403) {
-        throw StateError('存储桶找到了，但密钥或地域不对（403）。'
-            '请检查 SecretId / SecretKey，以及地域是否与创建桶时一致');
-      }
-      if (resp.statusCode == 404) {
-        throw StateError('存储桶不存在（404）。请确认桶名拼写完全一致，'
-            '含末尾账号数字，且地域与桶实际所在地一致');
-      }
-      throw StateError('连接失败：HTTP ${resp.statusCode}');
+      // HEAD 响应没有 body，改用同签名的 GET 再取一次，便于拿到腾讯云的错误码
+      final probe = _signedRequest('GET', '');
+      final probeResp = await _http.get(probe.uri, headers: probe.headers);
+      final err = _parseCosError(probeResp.body);
+      final reason = _explain(err.code, 'HTTP ${resp.statusCode}${err.code.isEmpty ? '' : '（${err.code}）'}');
+      throw StateError(reason);
     } on HandshakeException catch (e) {
       throw StateError('HTTPS 握手失败（${e.message}）。\n'
           '若桶名与地域确认无误，可能是当前网络对 COS 域名的拦截，'
@@ -128,17 +183,17 @@ class CosClient {
   Future<void> uploadFile(File file, String key) async {
     final length = await file.length();
     final bytes = await file.readAsBytes();
-    final payload = base64.encode(sha1Bytes(bytes));
 
     if (length <= _partSize) {
-      final req = _signedRequest('PUT', key, payloadSha256: payload);
+      final req = _signedRequest('PUT', key, contentSha1Hex: sha1.convert(bytes).toString());
       final resp = await _http.put(
         req.uri,
         headers: {...req.headers, 'Content-Length': '$length'},
         body: bytes,
       );
       if (resp.statusCode != 200) {
-        throw HttpException('上传 $key 失败：HTTP ${resp.statusCode} ${resp.body}');
+        final err = _parseCosError(resp.body);
+        throw HttpException('上传 $key 失败：${_explain(err.code, 'HTTP ${resp.statusCode}')}');
       }
       return;
     }
@@ -147,7 +202,8 @@ class CosClient {
     final initReq = _signedRequest('POST', key, query: {'uploads': ''});
     final initResp = await _http.post(initReq.uri, headers: initReq.headers);
     if (initResp.statusCode != 200) {
-      throw HttpException('初始化分片失败：HTTP ${initResp.statusCode} ${initResp.body}');
+      final err = _parseCosError(initResp.body);
+      throw HttpException('初始化分片失败：${_explain(err.code, 'HTTP ${initResp.statusCode}')}');
     }
     final uploadId = RegExp(r'<UploadId>(.*?)</UploadId>')
         .firstMatch(initResp.body)
@@ -167,20 +223,20 @@ class CosClient {
           'partNumber': '$part',
           'uploadId': uploadId,
         },
-        payloadSha256: base64.encode(sha1Bytes(chunk)),
+        contentSha1Hex: sha1.convert(chunk).toString(),
       );
       final partResp = await _http.put(
         partReq.uri,
         headers: {
           ...partReq.headers,
           'Content-Length': '${chunk.length}',
-          // 签名需覆盖本片的 Content-Range
-          'x-cos-content-range': 'bytes $off-${end - 1}/$length',
         },
         body: chunk,
       );
       if (partResp.statusCode != 200) {
-        throw HttpException('分片 $part 上传失败：HTTP ${partResp.statusCode}');
+        final err = _parseCosError(partResp.body);
+        throw HttpException(
+            '分片 $part 上传失败：${_explain(err.code, 'HTTP ${partResp.statusCode}')}');
       }
     }
 
@@ -191,7 +247,8 @@ class CosClient {
     );
     final doneResp = await _http.post(doneReq.uri, headers: doneReq.headers);
     if (doneResp.statusCode != 200) {
-      throw HttpException('合并分片失败：HTTP ${doneResp.statusCode} ${doneResp.body}');
+      final err = _parseCosError(doneResp.body);
+      throw HttpException('合并分片失败：${_explain(err.code, 'HTTP ${doneResp.statusCode}')}');
     }
   }
 
