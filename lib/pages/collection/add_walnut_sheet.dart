@@ -568,7 +568,7 @@ class _AddWalnutSheetState extends ConsumerState<AddWalnutSheet> {
     if (_patina.isNotEmpty && id != null) {
       final rels = <String>[];
       for (final f in _patina) {
-        rels.add(await ImageStore.save('patina', id, File(f.path)));
+        rels.add(await ImageStore.savePatina('walnut', id, File(f.path)));
       }
       await PatinaDao.insert(Patina(
           ownerType: 'walnut', ownerId: id, date: _patinaDateCtl.text, images: rels));
