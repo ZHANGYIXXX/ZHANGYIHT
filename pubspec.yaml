@@ -1,0 +1,39 @@
+name: yizhanghe
+description: 壹ZHANG核 - 文玩核桃收藏管理 App
+publish_to: 'none'
+version: 2.0.0+3
+
+environment:
+  sdk: '>=3.0.0 <4.0.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+  cupertino_icons: ^1.0.6
+  flutter_riverpod: ^2.4.0
+  sqflite: ^2.3.0
+  path: ^1.9.0
+  path_provider: ^2.1.0
+  image_picker: ^1.0.7
+  shared_preferences: ^2.2.0
+  # 保存图片到系统相册（大图页「保存到手机」按钮，MediaStore 方式免存储权限）
+  gal: ^2.3.0
+  # V2：NAS 同步（WebDAV 通用客户端 + 极空间适配）共用底层 HTTP
+  http: ^1.2.0
+  # V2：Windows 桌面端 SQLite 支持（FFI 实现；Android 走原 sqflite 不受影响）
+  sqflite_common_ffi: ^2.3.0
+  # Digest 鉴权需要的 md5（dart:convert 未导出 md5）
+  crypto: ^3.0.3
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^3.0.0
+
+flutter:
+  uses-material-design: true
+  # 图标资产（CI 出包流程从此处拷回 android/app/src/main/res/mipmap-*）
+  assets:
+    - assets/icon/source.png
+    - assets/theme/ruihetu.jpg
+    - assets/seed/walnuts.json
