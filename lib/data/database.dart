@@ -1,5 +1,5 @@
+import 'dart:async';
 import 'dart:io';
-import 'package:sqflite/sqflite.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:path/path.dart' as p;
 import '../logic/platform_paths.dart';
@@ -7,11 +7,13 @@ import '../logic/platform_paths.dart';
 // 数据库初始化（单例）
 class AppDatabase {
   static Database? _db;
+  // 用 Completer 守卫首调的并发初始化，避免极端时序下重复打开句柄。
+  static Completer<Database>? _initCompleter;
 
-  static Future<Database> get instance async {
-    if (_db != null) return _db!;
-    _db = await _init();
-    return _db!;
+  static Future<Database> get instance {
+    if (_db != null) return Future.value(_db!);
+    _initCompleter ??= Completer<Database>()..complete(_init());
+    return _initCompleter!.future;
   }
 
   static Future<Database> _init() async {
@@ -87,6 +89,7 @@ class AppDatabase {
 
   // 导入备份前关闭句柄：覆盖 app.db 文件后由 instance 重新打开读取新库
   static Future<void> close() async {
+    _initCompleter = null;
     if (_db != null) {
       await _db!.close();
       _db = null;

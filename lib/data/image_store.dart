@@ -46,7 +46,11 @@ class ImageStore {
   static Future<void> deleteFile(String rel) async {
     if (rel.isEmpty) return;
     final base = await PlatformPaths.appDataDir();
-    final f = File(p.join(base.path, rel));
+    final resolved = p.canonicalize(p.join(base.path, rel));
+    if (!p.isWithin(base.path, resolved)) {
+      throw ArgumentError('非法相对路径，拒绝删除: $rel');
+    }
+    final f = File(resolved);
     if (await f.exists()) await f.delete();
   }
 

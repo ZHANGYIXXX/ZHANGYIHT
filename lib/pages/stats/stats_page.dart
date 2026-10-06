@@ -77,9 +77,10 @@ class _StatsBodyState extends State<_StatsBody> {
     final anchor = _StatAnchor(
       onJump: (k) {
         final c = k.currentContext;
-        if (c != null)
+        if (c != null) {
           Scrollable.ensureVisible(c,
               duration: const Duration(milliseconds: 300), alignment: 0);
+        }
       },
       keys: [
         (StatsPage._kKpi, '核心结果'),
@@ -178,7 +179,7 @@ class _StatsBodyState extends State<_StatsBody> {
           const SizedBox(height: 6),
           _Bars(
             rows
-                .map((r) => (r.month.substring(5) + '月', r.count.toDouble(), Tokens.accent))
+                .map((r) => ('${r.month.substring(5)}月', r.count.toDouble(), Tokens.accent))
                 .toList(),
           ),
           const SizedBox(height: 14),
@@ -187,7 +188,7 @@ class _StatsBodyState extends State<_StatsBody> {
           const SizedBox(height: 6),
           _Line(
             rows
-                .map((r) => (r.month.substring(5) + '月', r.amount))
+                .map((r) => ('${r.month.substring(5)}月', r.amount))
                 .toList(),
           ),
           if (top3.isNotEmpty)
@@ -410,8 +411,9 @@ class _Bars extends StatelessWidget {
   const _Bars(this.bars);
   @override
   Widget build(BuildContext context) {
-    if (bars.isEmpty)
+    if (bars.isEmpty) {
       return Text('暂无数据', style: TextStyle(color: Tokens.faint));
+    }
     final maxV = bars.map((b) => b.$2).reduce((a, b) => a > b ? a : b);
     return LayoutBuilder(builder: (c, cons) {
       final w = cons.maxWidth;
@@ -455,14 +457,15 @@ class _Line extends StatelessWidget {
   const _Line(this.pts);
   @override
   Widget build(BuildContext context) {
-    if (pts.isEmpty)
+    if (pts.isEmpty) {
       return Text('暂无数据', style: TextStyle(color: Tokens.faint));
+    }
     final maxV = pts.map((p) => p.$2).reduce((a, b) => a > b ? a : b);
     return LayoutBuilder(builder: (c, cons) {
       final w = cons.maxWidth;
       final n = pts.length;
-      final h = 130.0;
-      final pad = 24.0;
+      const h = 130.0;
+      const pad = 24.0;
       final plotW = math.max(1.0, w - pad * 2);
       final slot = n > 1 ? plotW / (n - 1) : 0.0;
       final points = <Offset>[];
@@ -517,7 +520,9 @@ class _LinePainter extends CustomPainter {
       ..style = PaintingStyle.stroke
       ..strokeJoin = StrokeJoin.round;
     final path = Path()..moveTo(pts.first.dx, pts.first.dy);
-    for (final o in pts.skip(1)) path.lineTo(o.dx, o.dy);
+    for (final o in pts.skip(1)) {
+      path.lineTo(o.dx, o.dy);
+    }
     canvas.drawPath(path, p);
   }
 
@@ -559,7 +564,7 @@ class _DonutPainter extends CustomPainter {
     final cx = size.width / 2;
     final cy = size.height / 2;
     final r = size.width / 2 - 8;
-    final sw = 14.0;
+    const sw = 14.0;
     final bg = Paint()
       ..color = Tokens.bg
       ..style = PaintingStyle.stroke

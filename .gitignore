@@ -32,6 +32,8 @@ migrate_working_dir/
 .pub/
 /build/
 /coverage/
+/android/build/
+/windows/flutter/ephemeral/
 
 # Symbolication related
 app.*.symbols

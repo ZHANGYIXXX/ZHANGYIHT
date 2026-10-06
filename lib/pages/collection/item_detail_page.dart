@@ -123,8 +123,9 @@ class ItemDetailPage extends ConsumerWidget {
         TextButton(onPressed: () => Navigator.pop(context), child: const Text('取消')),
         TextButton(                    onPressed: () async {
                       await DeleteHelper.item(it.id!);
+                      if (!context.mounted) return;
                       if (Navigator.canPop(context)) Navigator.pop(context);
-          refreshCollection(ref);
+          refreshCollection(ref, itemId: it.id);
           if (Navigator.canPop(context)) Navigator.pop(context);
         }, child: Text('删除', style: TextStyle(color: Tokens.badD10))),
       ],

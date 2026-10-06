@@ -193,6 +193,7 @@ class _AddWalnutSheetState extends ConsumerState<AddWalnutSheet> {
         _toast('请填写：${miss.join('、')}');
         return; // 仍不填 → 留在页面，再右滑会再次提示
       }
+      if (!mounted) return;
       await _save(context);
       return;
     }
@@ -573,8 +574,8 @@ class _AddWalnutSheetState extends ConsumerState<AddWalnutSheet> {
       await PatinaDao.insert(Patina(
           ownerType: 'walnut', ownerId: id, date: _patinaDateCtl.text, images: rels));
     }
-    refreshCollection(ref);
-    if (mounted) Navigator.pop(context);
+    refreshCollection(ref, walnutId: id);
+    if (context.mounted) Navigator.pop(context);
   }
 
   void _toast(String m) =>

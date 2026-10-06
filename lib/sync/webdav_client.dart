@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
+import 'dart:math';
 import 'package:http/http.dart' as http;
 import 'package:http/io_client.dart';
 import 'package:crypto/crypto.dart' hide sha256;
@@ -76,41 +77,49 @@ class WebDavClient {
     _qop = m['qop'];
   }
 
+  /// 统一发送：401 → 重新解析 Digest 后重发一次；
+  /// 修掉先前只有 propfind 有 401 重试、长备份 nonce 过期会中途失败的问题。
+  Future<http.Response> _send(String method, String path,
+      {Map<String, String>? extraHeaders, List<int>? bodyBytes}) async {
+    Future<http.Response> doSend() async {
+      final req = http.Request(method, Uri.parse(_join(path)))
+        ..headers.addAll(_authHeaders(method, path))
+        ..headers.addAll(extraHeaders ?? {});
+      if (bodyBytes != null) req.bodyBytes = bodyBytes;
+      final resp = await _client.send(req);
+      return http.Response.fromStream(resp);
+    }
+
+    var r = await doSend();
+    if (r.statusCode == 401 && useDigest) {
+      _maybeParseDigest(r);
+      r = await doSend();
+    }
+    return r;
+  }
+
   /// 探测连通性与鉴权：对根目录做一次深度 1 的 PROPFIND。
   Future<void> testConnection(String rootPath) async {
     await propfind(rootPath, depth: 1);
   }
 
   Future<List<WebDavItem>> propfind(String path, {int depth = 1}) async {
-    final url = _join(path);
     const body = '<?xml version="1.0"?><d:propfind xmlns:d="DAV:">'
         '<d:prop><d:resourcetype/><d:getcontentlength/>'
         '<d:getetag/><d:getlastmodified/></d:prop></d:propfind>';
-    final req = http.Request('PROPFIND', Uri.parse(url))
-      ..headers['Depth'] = '$depth'
-      ..headers['Content-Type'] = 'application/xml; charset=utf-8'
-      ..headers.addAll(_authHeaders('PROPFIND', path))
-      ..body = body;
-    var resp = await _client.send(req);
-    var r = await http.Response.fromStream(resp);
-    if (r.statusCode == 401 && useDigest) {
-      _maybeParseDigest(r);
-      final req2 = http.Request('PROPFIND', Uri.parse(url))
-        ..headers['Depth'] = '$depth'
-        ..headers['Content-Type'] = 'application/xml; charset=utf-8'
-        ..headers.addAll(_authHeaders('PROPFIND', path))
-        ..body = body;
-      r = await http.Response.fromStream(await _client.send(req2));
-    }
+    final r = await _send('PROPFIND', path,
+        extraHeaders: {
+          'Depth': '$depth',
+          'Content-Type': 'application/xml; charset=utf-8',
+        },
+        bodyBytes: utf8.encode(body));
     if (r.statusCode >= 400) throw WebDavException(r.statusCode, r.body);
     return _parsePropfind(r.body);
   }
 
   /// 创建集合（目录）。
   Future<void> mkcol(String path) async {
-    final resp = await _client.send(http.Request('MKCOL', Uri.parse(_join(path)))
-      ..headers.addAll(_authHeaders('MKCOL', path)));
-    final r = await http.Response.fromStream(resp);
+    final r = await _send('MKCOL', path);
     if (r.statusCode >= 400 && r.statusCode != 405) {
       // 405 = 已存在，视为成功
       throw WebDavException(r.statusCode, r.body);
@@ -136,43 +145,37 @@ class WebDavClient {
     int offset = 0,
     int? total,
   }) async {
-    final url = _join(path);
     final all = total ?? (offset + bytes.length);
-    final headers = <String, String>{}
-      ..addAll(_authHeaders('PUT', path))
-      ..['Content-Type'] = 'application/octet-stream';
+    final headers = <String, String>{
+      'Content-Type': 'application/octet-stream',
+    };
     if (offset > 0) {
       final end = offset + bytes.length - 1;
       headers['Content-Range'] = 'bytes $offset-$end/$all';
     }
-    final req = http.Request('PUT', Uri.parse(url))
-      ..headers.addAll(headers)
-      ..bodyBytes = bytes;
-    final r = await http.Response.fromStream(await _client.send(req));
+    final r = await _send('PUT', path, extraHeaders: headers, bodyBytes: bytes);
     if (r.statusCode >= 400) throw WebDavException(r.statusCode, r.body);
   }
 
   /// 下载文件。
   Future<List<int>> get(String path) async {
-    final resp = await _client.get(Uri.parse(_join(path)), headers: _authHeaders('GET', path));
-    if (resp.statusCode >= 400) throw WebDavException(resp.statusCode, resp.body);
-    return resp.bodyBytes;
+    final r = await _send('GET', path);
+    if (r.statusCode >= 400) throw WebDavException(r.statusCode, r.body);
+    return r.bodyBytes;
   }
 
   /// 删除文件或空目录。
   Future<void> delete(String path) async {
-    final resp = await _client.send(http.Request('DELETE', Uri.parse(_join(path)))
-      ..headers.addAll(_authHeaders('DELETE', path)));
-    final r = await http.Response.fromStream(resp);
+    final r = await _send('DELETE', path);
     if (r.statusCode >= 400) throw WebDavException(r.statusCode, r.body);
   }
 
   /// 远端已存在大小（用于断点续传前的探测）。不存在返回 -1。
   Future<int> headSize(String path) async {
-    final resp = await _client.head(Uri.parse(_join(path)), headers: _authHeaders('HEAD', path));
-    if (resp.statusCode == 404) return -1;
-    if (resp.statusCode >= 400) throw WebDavException(resp.statusCode, '');
-    return int.tryParse(resp.headers['content-length'] ?? '') ?? -1;
+    final r = await _send('HEAD', path);
+    if (r.statusCode == 404) return -1;
+    if (r.statusCode >= 400) throw WebDavException(r.statusCode, '');
+    return int.tryParse(r.headers['content-length'] ?? '') ?? -1;
   }
 
   List<WebDavItem> _parsePropfind(String xml) {
@@ -216,8 +219,10 @@ class WebDavClient {
       md5.convert(utf8.encode(s)).bytes.map((b) => b.toRadixString(16).padLeft(2, '0')).join();
 
   static String _randomHex(int n) {
-    final r = List<int>.generate(n, (_) => DateTime.now().microsecondsSinceEpoch % 256);
-    return r.map((b) => b.toRadixString(16).padLeft(2, '0')).join();
+    final r = Random.secure();
+    return List<int>.generate(n, (_) => r.nextInt(256))
+        .map((b) => b.toRadixString(16).padLeft(2, '0'))
+        .join();
   }
 }
 

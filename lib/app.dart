@@ -24,7 +24,6 @@ class App extends ConsumerWidget {
         ),
         colorScheme: ColorScheme.light(
           primary: Tokens.accent,
-          background: Tokens.bg,
           surface: Tokens.bg,
           error: Tokens.seal,
         ),

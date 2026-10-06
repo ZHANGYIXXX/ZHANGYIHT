@@ -17,8 +17,12 @@ class Stats {
       map[type] = StatRow(type, r.count + 1, r.amount + price);
     }
 
-    for (final w in walnuts) add('核桃', w.price);
-    for (final it in items) add(it.type, it.price);
+    for (final w in walnuts) {
+      add('核桃', w.price);
+    }
+    for (final it in items) {
+      add(it.type, it.price);
+    }
     return map.values.toList();
   }
 

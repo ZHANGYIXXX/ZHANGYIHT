@@ -1,3 +1,5 @@
+import 'package:sqflite/sqflite.dart';
+
 import '../database.dart';
 import '../../logic/codegen.dart';
 import '../models/walnut.dart';
@@ -9,6 +11,7 @@ class WalnutDao {
   }
 
   static Future<int> update(Walnut w) async {
+    if (w.id == null) throw ArgumentError('update 需要已落库的 id');
     final db = await AppDatabase.instance;
     return db.update('walnut', w.toMap(), where: 'id = ?', whereArgs: [w.id]);
   }
@@ -37,4 +40,15 @@ class WalnutDao {
         columns: ['code'], where: 'buy_date = ?', whereArgs: [buyDate]);
     return CodeGen.maxSeq(rows.map((r) => (r['code'] as String?) ?? ''));
   }
+
+  /// 事务版本：供 Seed 等批量导入使用，与 insertTxn 配对。
+  static Future<int> maxSeqSameDayTxn(Transaction txn, String buyDate) async {
+    final rows = await txn.query('walnut',
+        columns: ['code'], where: 'buy_date = ?', whereArgs: [buyDate]);
+    return CodeGen.maxSeq(rows.map((r) => (r['code'] as String?) ?? ''));
+  }
+
+  /// 事务版本：配合 maxSeqSameDayTxn 使用，保证批量写入原子性。
+  static Future<int> insertTxn(Transaction txn, Walnut w) =>
+      txn.insert('walnut', w.toMap());
 }

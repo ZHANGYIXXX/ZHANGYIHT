@@ -158,7 +158,7 @@ class _CoverCarouselState extends State<CoverCarousel> {
                       decoration: BoxDecoration(
                         color: i == _idx
                             ? Colors.white
-                            : Colors.white.withOpacity(0.5),
+                            : Colors.white.withValues(alpha: 0.5),
                         borderRadius: BorderRadius.circular(3),
                       ),
                     ),

@@ -36,8 +36,9 @@ abstract class AppRouter {
   static Future<T?> toImageViewer<T>(
           BuildContext context, List<String> abs, int initial) =>
       Navigator.of(context).push<T>(MaterialPageRoute(
-          builder: (_) =>
-              ImageViewer(files: abs.map((p) => XFile(p)).toList(), initial: initial)));
+          builder: (_) => ImageViewer(
+              files: abs.map((p) => XFile(p)).toList(),
+              initial: abs.isEmpty ? 0 : initial.clamp(0, abs.length - 1))));
 
   /// NAS 同步设置
   static Future<T?> toNasSync<T>(BuildContext context) =>

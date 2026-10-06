@@ -9,6 +9,7 @@ class ItemDao {
   }
 
   static Future<int> update(Item it) async {
+    if (it.id == null) throw ArgumentError('update 需要已落库的 id');
     final db = await AppDatabase.instance;
     return db.update('item', it.toMap(), where: 'id = ?', whereArgs: [it.id]);
   }

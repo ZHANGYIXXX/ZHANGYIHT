@@ -69,7 +69,7 @@ Future<void> openNeuSelect(BuildContext context, String current,
           BoxConstraints(maxHeight: MediaQuery.of(c).size.height * 0.6),
       decoration: BoxDecoration(
           color: Tokens.bg,
-          borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(24))),
       padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
       child: Column(
         mainAxisSize: MainAxisSize.min,

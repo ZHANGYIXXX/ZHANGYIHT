@@ -1,6 +1,8 @@
 import 'dart:convert';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import '../data/database.dart';
 import '../data/daos/walnut_dao.dart';
 import '../data/models/walnut.dart';
 import 'codegen.dart';
@@ -23,36 +25,42 @@ class Seed {
     try {
       final json = await rootBundle.loadString(_asset);
       final list = jsonDecode(json) as List<dynamic>;
-      for (final raw in list) {
-        final m = raw as Map<String, dynamic>;
-        final buyDate = (m['buyDate'] as String? ?? '').trim();
-        if (buyDate.isEmpty) continue; // 没有入手日期无法生成编号，跳过
-        final seq = await WalnutDao.maxSeqSameDay(buyDate);
-        final code = CodeGen.format('核桃', buyDate, seq);
-        await WalnutDao.insert(Walnut(
-          code: code,
-          name: (m['name'] as String? ?? '').trim(),
-          category: (m['category'] as String? ?? '').trim(),
-          variety: (m['variety'] as String? ?? '').trim(),
-          price: _d(m['price']),
-          lBian: _d(m['lBian']),
-          lDu: _d(m['lDu']),
-          lGao: _d(m['lGao']),
-          rBian: _d(m['rBian']),
-          rDu: _d(m['rDu']),
-          rGao: _d(m['rGao']),
-          weight: _d(m['weight']),
-          buyDate: buyDate,
-          channel: (m['channel'] as String? ?? '').trim(),
-          merchant: (m['merchant'] as String? ?? '').trim(),
-          full: m['full'] == true,
-          repaired: m['repaired'] == true,
-          yellow: m['yellow'] == true,
-        ));
-        n++;
-      }
-    } catch (_) {
-      // 资产缺失或格式异常不阻塞启动，下次再试
+      // 整批包进单个事务并复用 DAO 的事务版本（maxSeqSameDayTxn / insertTxn），
+      // 杜绝「灌到第 10 条才报错」却留下前 9 条脏数据的问题；标记位在事务
+      // 提交之后才置位，下次启动不会重复灌入。
+      final db = await AppDatabase.instance;
+      await db.transaction((txn) async {
+        for (final raw in list) {
+          final m = raw as Map<String, dynamic>;
+          final buyDate = (m['buyDate'] as String? ?? '').trim();
+          if (buyDate.isEmpty) continue; // 没有入手日期无法生成编号，跳过
+          final seq = await WalnutDao.maxSeqSameDayTxn(txn, buyDate);
+          await WalnutDao.insertTxn(txn, Walnut(
+            code: CodeGen.format('核桃', buyDate, seq),
+            name: (m['name'] as String? ?? '').trim(),
+            category: (m['category'] as String? ?? '').trim(),
+            variety: (m['variety'] as String? ?? '').trim(),
+            price: _d(m['price']),
+            lBian: _d(m['lBian']),
+            lDu: _d(m['lDu']),
+            lGao: _d(m['lGao']),
+            rBian: _d(m['rBian']),
+            rDu: _d(m['rDu']),
+            rGao: _d(m['rGao']),
+            weight: _d(m['weight']),
+            buyDate: buyDate,
+            channel: (m['channel'] as String? ?? '').trim(),
+            merchant: (m['merchant'] as String? ?? '').trim(),
+            full: m['full'] == true,
+            repaired: m['repaired'] == true,
+            yellow: m['yellow'] == true,
+          ));
+          n++;
+        }
+      });
+    } catch (e, s) {
+      // 资产缺失或格式异常不阻塞启动，下次再试（事务已自动回滚）
+      debugPrint('Seed 导入失败（已回滚，下次启动可重试）：$e\n$s');
       return 0;
     }
     await prefs.setBool(_flag, true);

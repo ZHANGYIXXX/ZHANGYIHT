@@ -370,8 +370,9 @@ class WalnutDetailPage extends ConsumerWidget {
                 TextButton(
                     onPressed: () async {
                       await DeleteHelper.walnut(w.id!);
+                      if (!context.mounted) return;
                       if (Navigator.canPop(context)) Navigator.pop(context);
-                      refreshCollection(ref);
+                      refreshCollection(ref, walnutId: w.id);
                       if (Navigator.canPop(context)) Navigator.pop(context);
                     },
                     child: Text('删除',

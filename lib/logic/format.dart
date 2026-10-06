@@ -25,7 +25,11 @@ String formatDays(String buyDate) {
   final n = calcDays(buyDate);
   if (n <= 0) return '盘玩天数 —';
   if (n < 30) return '已盘玩 $n 天';
-  if (n < 365) return '已盘玩 ${(n / 30).floor()} 个月 $n 天';
+  if (n < 365) {
+    final months = n ~/ 30;
+    final days = n % 30;
+    return days == 0 ? '已盘玩 $months 个月' : '已盘玩 $months 个月 $days 天';
+  }
   return '已盘玩 ${(n / 365).floor()} 年 ${((n % 365) / 30).floor()} 个月';
 }
 

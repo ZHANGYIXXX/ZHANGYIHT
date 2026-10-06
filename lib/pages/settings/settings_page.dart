@@ -105,16 +105,19 @@ class SettingsPage extends ConsumerWidget {
   Future<void> _export(BuildContext context) async {
     try {
       final src = await PlatformPaths.appDataDir();
-      if (!await src.exists()) { _toast(context, '还没有任何数据'); return; }
+      if (!await src.exists()) {
+        if (context.mounted) _toast(context, '还没有任何数据');
+        return;
+      }
       final dl = await PlatformPaths.backupBase();
       final ts = DateTime.now();
       final stamp = '${ts.year}${ts.month.toString().padLeft(2, '0')}${ts.day.toString().padLeft(2, '0')}-${ts.hour.toString().padLeft(2, '0')}${ts.minute.toString().padLeft(2, '0')}';
       final dest = Directory(p.join(dl.path, '壹ZHANG核备份', stamp));
       await _copyDir(src, dest);
       final files = await dest.list(recursive: true).length;
-      _toast(context, '已导出 $files 项到：\n${dest.path}');
+      if (context.mounted) _toast(context, '已导出 $files 项到：\n${dest.path}');
     } catch (e) {
-      _toast(context, '导出失败: $e');
+      if (context.mounted) _toast(context, '导出失败: $e');
     }
   }
 
@@ -135,15 +138,22 @@ class SettingsPage extends ConsumerWidget {
   Future<void> _import(BuildContext context, WidgetRef ref) async {
     try {
       final root = await PlatformPaths.backupRoot();
-      if (root == null) { _toast(context, '没有找到备份目录'); return; }
-      final backups = await _listBackups(root);
-      if (backups.isEmpty) {
-        _toast(context, '没有可用的备份，请先「导出数据库 + 原图」');
+      if (root == null) {
+        if (context.mounted) _toast(context, '没有找到备份目录');
         return;
       }
-      final chosen = backups.length == 1 ? backups.first : (await _pickBackup(context, backups));
+      final backups = await _listBackups(root);
+      if (backups.isEmpty) {
+        if (context.mounted) _toast(context, '没有可用的备份，请先「导出数据库 + 原图」');
+        return;
+      }
+      if (!context.mounted) return;
+      final chosen = backups.length == 1
+          ? backups.first
+          : (await _pickBackup(context, backups));
       if (chosen == null) return;
 
+      if (!context.mounted) return;
       final ok = await _confirm(context,
           '恢复「${p.basename(chosen.path)}」将覆盖当前 App 内的全部数据（导入前会自动备份当前数据）。确定恢复？');
       if (!ok) return;
@@ -162,9 +172,9 @@ class SettingsPage extends ConsumerWidget {
       // 4) 重置单例并刷新列表
       ref.invalidate(walnutsProvider);
       ref.invalidate(itemsProvider);
-      _toast(context, '已恢复：${p.basename(chosen.path)}\n建议重启 App 以彻底刷新界面');
+      if (context.mounted) _toast(context, '已恢复：${p.basename(chosen.path)}\n建议重启 App 以彻底刷新界面');
     } catch (e) {
-      _toast(context, '导入失败: $e');
+      if (context.mounted) _toast(context, '导入失败: $e');
     }
   }
 

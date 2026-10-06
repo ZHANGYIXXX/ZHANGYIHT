@@ -6,6 +6,9 @@ import '../data/models/walnut.dart';
 import '../data/models/item.dart';
 import '../data/models/patina.dart';
 import '../data/models/enums.dart';
+import '../theme/tokens.dart';
+import 'dart:ui' show Color;
+import 'theme.dart';
 
 // 全量列表（增删改后 invalidate 触发刷新）
 final walnutsProvider = FutureProvider<List<Walnut>>((ref) => WalnutDao.all());
@@ -43,7 +46,31 @@ final collectionFilterProvider = StateProvider<String>((ref) => '');
 final collectionSearchProvider = StateProvider<String>((ref) => '');
 
 // 统一刷新：增删改后调用 refreshCollection(ref)
-void refreshCollection(WidgetRef ref) {
+void refreshCollection(WidgetRef ref, {int? walnutId, int? itemId, OwnerRef? owner}) {
   ref.invalidate(walnutsProvider);
   ref.invalidate(itemsProvider);
+  if (walnutId != null) ref.invalidate(walnutByIdProvider(walnutId));
+  if (itemId != null) ref.invalidate(itemByIdProvider(itemId));
+  if (owner != null) ref.invalidate(patinaByOwnerProvider(owner));
 }
+
+/// 当前主题 token 快照：显式 watch 主题 Provider，
+/// 主题切换时一并刷新；widget 只需 `ref.watch(tokensProvider)['bg']` 等即可。
+///
+/// 说明：Tokens 是静态字段类（无实例），所以这里以「Map<String, Color> 快照」
+/// 形式暴露当前生效的色值——既保留 #17「颜色单源」的语义，
+/// 又避免 widget 直接依赖全局可变静态。
+final tokensProvider = Provider<Map<String, Color>>((ref) {
+  ref.watch(themeProvider);
+  return <String, Color>{
+    'bg': Tokens.bg,
+    'text': Tokens.text,
+    'muted': Tokens.muted,
+    'faint': Tokens.faint,
+    'accent': Tokens.accent,
+    'accentSoft': Tokens.accentSoft,
+    'seal': Tokens.seal,
+    'gold': Tokens.gold,
+    'badD10': Tokens.badD10,
+  };
+});

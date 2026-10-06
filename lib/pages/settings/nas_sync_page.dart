@@ -205,7 +205,7 @@ class _NasSyncPageState extends ConsumerState<NasSyncPage> {
       final r = await orch.backupAll(root);
       _toast('备份完成：上传 ${r.uploaded}，跳过 ${r.skipped}，失败 ${r.failed}');
       if (r.errors.isNotEmpty) {
-        setState(() => _lastResult = '失败明细：\n' + r.errors.take(5).join('\n'));
+        setState(() => _lastResult = '失败明细：\n${r.errors.take(5).join('\n')}');
       }
     } catch (e) {
       _toast('备份失败：$e');

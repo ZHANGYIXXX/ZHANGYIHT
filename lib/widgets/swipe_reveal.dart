@@ -49,9 +49,9 @@ class _SwipeRevealState extends State<SwipeReveal>
     if (_listener != null) _c.removeListener(_listener!);
     final begin = _dragX;
     _c.reset();
-    final l = () {
+    void l() {
       setState(() => _dragX = begin + (target - begin) * _c.value);
-    };
+    }
     _listener = l;
     _c.addListener(l);
     _c.forward();

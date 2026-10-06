@@ -66,7 +66,7 @@ class _AppShellState extends ConsumerState<AppShell> {
         bottomNavigationBar: Container(
           decoration: BoxDecoration(
             color: Tokens.bg,
-            borderRadius: BorderRadius.vertical(top: Radius.circular(22)),
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(22)),
             // 瑞鹤图主题：底栏上沿一道淡金线，呼应宫阙屋檐压边
             border: crane
                 ? Border(top: BorderSide(color: Tokens.gold, width: 1))

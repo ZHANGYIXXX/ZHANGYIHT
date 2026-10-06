@@ -179,6 +179,7 @@ class _AddItemSheetState extends ConsumerState<AddItemSheet> {
         _toast('请填写：${miss.join('、')}');
         return;
       }
+      if (!mounted) return;
       await _save(context);
       return;
     }
@@ -472,7 +473,7 @@ class _AddItemSheetState extends ConsumerState<AddItemSheet> {
       ));
     }
 
-    refreshCollection(ref);
-    if (mounted) Navigator.pop(context);
+    refreshCollection(ref, itemId: id);
+    if (context.mounted) Navigator.pop(context);
   }
 }

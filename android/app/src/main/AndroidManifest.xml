@@ -44,4 +44,8 @@
     </queries>
     <uses-permission android:name="android.permission.READ_MEDIA_IMAGES" />
     <uses-permission android:name="android.permission.CAMERA" />
+    <!-- NAS 同步（极空间 WebDAV）必需：无此权限则任何 socket 连接被系统拒绝
+         （SocketException: 操作不被允许, errno=1）。debug/profile 由 Flutter 模板自带，
+         但正式发布走 main，必须显式声明，否则正式包完全无法联网。 -->
+    <uses-permission android:name="android.permission.INTERNET" />
 </manifest>

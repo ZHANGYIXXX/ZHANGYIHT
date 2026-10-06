@@ -49,7 +49,18 @@ class SyncOrchestrator {
         if (n == 0) {
           r += const SyncResult(skipped: 1);
         } else {
-          r += const SyncResult(uploaded: 1);
+          // 上传后校验远端大小与本地一致（低成本完整性验证），
+          // 替代先前 Integrity 类仅被 verifyRemoteSizes 引用的状况。
+          final remoteSize = await client.headSize(remote);
+          if (remoteSize == e.size) {
+            r += const SyncResult(uploaded: 1);
+          } else {
+            r += SyncResult(
+                failed: 1,
+                errors: [
+                  '${e.relativePath}: 大小不一致(本地 ${e.size} / 远端 $remoteSize)'
+                ]);
+          }
         }
       } catch (err) {
         // 失败降级：单文件失败不中断整体（清单 §1 失败降级）

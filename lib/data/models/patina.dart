@@ -22,7 +22,7 @@ class Patina {
       id: m['id'] as int?,
       ownerType: type,
       ownerId: ownerId,
-      date: m['date'] as String,
+      date: m['date'] as String? ?? '',
       images: (m['images'] as String? ?? '').isEmpty
           ? const []
           : (m['images'] as String).split('|'),
