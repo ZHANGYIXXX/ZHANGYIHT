@@ -1,70 +1,80 @@
 // ignore_for_file: dangling_library_doc_comments
-/// V2 同步模块共用数据模型。
-/// PC 端（Flutter desktop）与华为端（Flutter Android）复用同一套类型，
-/// 保证三端同步语义一致、索引可互认。
+/// V2 云同步模块共用数据模型。
+/// PC 端（Flutter desktop）与手机端（Flutter Android）复用同一套类型，
+/// 保证两端同步语义一致、索引可互认。
 
-/// 同步目标配置（WebDAV 通用 + 极空间适配共用）。
+/// 云同步目标配置（腾讯云 COS）。
 class SyncConfig {
-  /// 服务端地址，含协议与端口，例如 https://192.168.1.10:5005
-  final String host;
+  /// 存储桶名称，形如 `yizhanghe-1250000000`（含 AppId 后缀）
+  final String bucket;
 
-  /// 登录用户名
-  final String username;
+  /// 地域，如 `ap-guangzhou`
+  final String region;
 
-  /// 登录密码（明文保存于本机私有存储；详见 config_store.dart 的安全说明）
-  final String password;
+  /// 腾讯云 API 密钥 ID
+  final String secretId;
 
-  /// 远端根目录（规范化后的绝对路径），例如 /dav/壹ZHANG核
+  /// 腾讯云 API 密钥
+  final String secretKey;
+
+  /// 远端根前缀（规范化后不含首尾斜杠），例如 `壹ZHANG核`
   final String remoteBasePath;
 
-  /// 极空间常使用自签证书，开启后可跳过证书校验（仅内网可信环境使用）
-  final bool trustSelfSigned;
-
-  /// 给用户看的好记名称，如「家里极空间」
+  /// 给用户看的好记名称，如「腾讯云」
   final String? displayName;
 
   const SyncConfig({
-    required this.host,
-    required this.username,
-    required this.password,
+    required this.bucket,
+    required this.region,
+    required this.secretId,
+    required this.secretKey,
     required this.remoteBasePath,
-    this.trustSelfSigned = false,
     this.displayName,
   });
 
+  /// 存储桶所在的 COS 域名，如 `yizhanghe-1250000000.cos.ap-guangzhou.myqcloud.com`
+  String get host => '$bucket.cos.$region.myqcloud.com';
+
+  /// 配置是否填写完整（缺任一项都无法发起请求）
+  bool get isValid =>
+      bucket.isNotEmpty &&
+      region.isNotEmpty &&
+      secretId.isNotEmpty &&
+      secretKey.isNotEmpty;
+
   SyncConfig copyWith({
-    String? host,
-    String? username,
-    String? password,
+    String? bucket,
+    String? region,
+    String? secretId,
+    String? secretKey,
     String? remoteBasePath,
-    bool? trustSelfSigned,
     String? displayName,
   }) {
     return SyncConfig(
-      host: host ?? this.host,
-      username: username ?? this.username,
-      password: password ?? this.password,
+      bucket: bucket ?? this.bucket,
+      region: region ?? this.region,
+      secretId: secretId ?? this.secretId,
+      secretKey: secretKey ?? this.secretKey,
       remoteBasePath: remoteBasePath ?? this.remoteBasePath,
-      trustSelfSigned: trustSelfSigned ?? this.trustSelfSigned,
       displayName: displayName ?? this.displayName,
     );
   }
 
   Map<String, dynamic> toJson() => {
-        'host': host,
-        'username': username,
-        'password': password,
+        'bucket': bucket,
+        'region': region,
+        'secretId': secretId,
+        'secretKey': secretKey,
         'remoteBasePath': remoteBasePath,
-        'trustSelfSigned': trustSelfSigned,
         'displayName': displayName,
       };
 
   factory SyncConfig.fromJson(Map<String, dynamic> json) => SyncConfig(
-        host: json['host'] as String,
-        username: json['username'] as String,
-        password: json['password'] as String,
-        remoteBasePath: json['remoteBasePath'] as String,
-        trustSelfSigned: json['trustSelfSigned'] as bool? ?? false,
+        bucket: json['bucket'] as String? ?? '',
+        region: json['region'] as String? ?? '',
+        secretId: json['secretId'] as String? ?? '',
+        secretKey: json['secretKey'] as String? ?? '',
+        remoteBasePath: json['remoteBasePath'] as String? ?? '壹ZHANG核',
         displayName: json['displayName'] as String?,
       );
 }

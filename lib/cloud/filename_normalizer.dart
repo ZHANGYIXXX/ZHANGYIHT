@@ -1,11 +1,11 @@
 /// 文件名规范化层。
 ///
-/// 不同系统（Windows / 华为 / 极空间 Z2PRO 的 WebDAV 实现）对文件名非法字符、
+/// 不同系统（Windows / 手机 / 云端对象存储）对文件名非法字符、
 /// 长度上限、大小写敏感度的容忍度不同。本层把任意「本地文件名 / 相对路径」
-/// 统一映射为 WebDAV 安全的规范化相对路径（始终用 `/` 分隔），保证三端索引一致、
+/// 统一映射为云端安全的规范化相对路径（始终用 `/` 分隔），保证多端索引一致、
 /// 不会出现远端拒绝写入或同名冲突。
 class FilenameNormalizer {
-  /// Windows / WebDAV 常见非法字符（含路径分隔符）
+  /// 云端对象存储常见非法字符（含路径分隔符）
   static const String _illegal = r'<>:"/\|?*';
 
   /// 把单个基本文件名规范化为安全名（不含路径分隔）。
@@ -33,7 +33,7 @@ class FilenameNormalizer {
     }
     s = s.trim();
     if (s.isEmpty) s = 'file';
-    // 4) 长度上限（极空间路径有上限，取 128 的安全值，保留扩展名）
+    // 4) 长度上限（云端 key 有长度限制，取 128 的安全值，保留扩展名）
     if (s.length > 128) {
       final dot = s.lastIndexOf('.');
       if (dot > 0 && dot < 128 - 1) {
@@ -46,7 +46,7 @@ class FilenameNormalizer {
     return s;
   }
 
-  /// 把本地相对路径（可能含平台分隔符）规范为 WebDAV 用的 `/` 分隔路径，逐段规范化。
+  /// 把本地相对路径（可能含平台分隔符）规范为云端用的 `/` 分隔路径，逐段规范化。
   /// 处理 `.` 与 `..`，保证结果稳定可复现。
   static String normalizeRelative(String relativePath) {
     final parts = relativePath.split(RegExp(r'[/\\]'));

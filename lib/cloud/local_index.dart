@@ -6,8 +6,8 @@ import 'filename_normalizer.dart';
 /// 本地文件 SHA-256 索引构建。
 ///
 /// 对本地某个根目录做全量扫描，产出「规范化相对路径 -> [SyncFileEntry]」的稳定映射。
-/// PC 端与华为端用同一套规则构建，从而能互相识别「同一份文件」并比对差异。
-class SyncIndex {
+/// PC 端与手机端用同一套规则构建，从而能互相识别「同一份文件」并比对差异。
+class LocalFileIndex {
   /// 扫描 [rootDir]，返回规范化相对路径为 key 的索引。
   /// [filter] 可选，返回 false 的文件会被跳过。
   static Future<Map<String, SyncFileEntry>> build(

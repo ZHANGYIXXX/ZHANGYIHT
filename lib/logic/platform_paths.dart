@@ -5,7 +5,7 @@ import 'package:path_provider/path_provider.dart';
 /// 跨平台目录统一层（评审意见 B13 / P0 基础项）。
 ///
 /// 把「备份基目录 / 备份根目录 / 应用文档目录」三处取值收敛到一处，
-/// 让备份、导入导出、NAS 同步、数据库与原图存储都走同一套逻辑，
+/// 让备份、导入导出、云同步、数据库与原图存储都走同一套逻辑，
 /// 不再各自重复写 Platform.isWindows / getExternalStorageDirectory 的 try/catch 坑。
 ///
 /// 取值规则：

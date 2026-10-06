@@ -31,14 +31,14 @@ class SettingsPage extends ConsumerWidget {
             padding: const EdgeInsets.symmetric(vertical: 14), child: Center(child: Text('导入数据库 + 原图（恢复备份）', style: TextStyle(color: Tokens.seal, fontWeight: FontWeight.w700))))),
       ]),
       const SizedBox(height: 16),
-      _block('NAS 同步（V2）', [
-        Text('把收藏数据单向备份到极空间 Z2PRO（本地优先、原图不压缩）。首次使用请先完成配置。',
+      _block('云同步（腾讯云 COS）', [
+        Text('把收藏数据单向备份到腾讯云对象存储（本地优先、原图不压缩）。换手机后从云端恢复即可。首次使用请先完成配置。',
             style: TextStyle(color: Tokens.muted, fontSize: Tokens.fsHint)),
         const SizedBox(height: 12),
         GestureDetector(
-          onTap: () => AppRouter.toNasSync(context),
+          onTap: () => AppRouter.toCloudSync(context),
           child: NeumorphicBox(state: NeuState.raised, radius: Tokens.rBtn,
-              padding: const EdgeInsets.symmetric(vertical: 14), child: Center(child: Text('NAS 同步设置', style: TextStyle(color: Tokens.accent, fontWeight: FontWeight.w700)))),
+              padding: const EdgeInsets.symmetric(vertical: 14), child: Center(child: Text('云同步设置', style: TextStyle(color: Tokens.accent, fontWeight: FontWeight.w700)))),
         ),
       ]),
       const SizedBox(height: 16),
@@ -48,7 +48,7 @@ class SettingsPage extends ConsumerWidget {
         _kv('用途', '文玩核桃收藏管理'),
       ]),
       const SizedBox(height: 16),
-      Text('网页相册分享、NAS 同步为 V2 规划功能。', style: TextStyle(color: Tokens.faint, fontSize: Tokens.fsLabel)),
+      Text('网页相册分享为 V2 规划功能。', style: TextStyle(color: Tokens.faint, fontSize: Tokens.fsLabel)),
     ])));
   }
 

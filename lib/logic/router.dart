@@ -8,7 +8,7 @@ import '../pages/collection/add_patina_page.dart';
 import '../pages/collection/add_walnut_sheet.dart';
 import '../pages/collection/item_detail_page.dart';
 import '../pages/collection/walnut_detail_page.dart';
-import '../pages/settings/nas_sync_page.dart';
+import '../pages/settings/cloud_sync_page.dart';
 import '../widgets/image_viewer.dart';
 
 /// 统一路由（评审意见 P0 第二层）。
@@ -40,10 +40,10 @@ abstract class AppRouter {
               files: abs.map((p) => XFile(p)).toList(),
               initial: abs.isEmpty ? 0 : initial.clamp(0, abs.length - 1))));
 
-  /// NAS 同步设置
-  static Future<T?> toNasSync<T>(BuildContext context) =>
+  /// 云同步设置（腾讯云 COS）
+  static Future<T?> toCloudSync<T>(BuildContext context) =>
       Navigator.of(context)
-          .push<T>(MaterialPageRoute(builder: (_) => const NasSyncPage()));
+          .push<T>(MaterialPageRoute(builder: (_) => const CloudSyncPage()));
 
   /// 新增核桃（全屏）
   static Future<void> toAddWalnut(BuildContext context) =>
