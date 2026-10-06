@@ -88,7 +88,7 @@ class _CloudSyncPageState extends ConsumerState<CloudSyncPage> {
 
   // ---- 配置块 ----
   Widget _configBlock(SyncConfig? cfg) => _block('腾讯云 COS 配置${cfg != null ? '（已配置）' : ''}', [
-        _field(_bucket, '存储桶 Bucket（如 yizhanghe-1250000000）'),
+        _field(_bucket, '存储桶 Bucket（腾讯云控制台里的桶名，形如 yizhanghe-1250000000）'),
         const SizedBox(height: 10),
         _field(_region, '地域 Region（如 ap-guangzhou）'),
         const SizedBox(height: 10),

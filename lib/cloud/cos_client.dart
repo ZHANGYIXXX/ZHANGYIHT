@@ -90,16 +90,38 @@ class CosClient {
   /// 连通性探测：HEAD 存储桶根，判断密钥与地域是否正确。
   /// 成功返回 true；失败抛 [StateError] 并带上可读原因。
   Future<bool> testConnection() async {
+    // 前置校验：Bucket 名格式错会导致 TLS 握手直接失败，
+    // 报出来的是 CERTIFICATE_VERIFY_FAILED / Hostname mismatch，
+    // 与「密钥不对」完全无关，不预处理的话排查方向会被带偏。
+    final bucket = cfg.bucket.trim();
+    if (bucket.isEmpty) {
+      throw StateError('存储桶名没填。请到腾讯云控制台「对象存储 → 存储桶列表」'
+          '复制桶名，形如 yizhanghe-1250000000（必须带末尾那串账号数字）');
+    }
+    if (!RegExp(r'^[a-z0-9][a-z0-9-]*-\d+$').hasMatch(bucket)) {
+      throw StateError('存储桶名格式不对：$bucket\n'
+          '正确格式 = 你的桶名 + 短横线 + 账号数字，例：yizhanghe-1250000000。\n'
+          '注意只能是英文小写字母、数字、短横线，不能用中文。');
+    }
+
     final req = _signedRequest('HEAD', '');
-    final resp = await _http.head(req.uri, headers: req.headers);
-    if (resp.statusCode == 200) return true;
-    if (resp.statusCode == 403) {
-      throw StateError('密钥或地域不正确（403），请检查 SecretId/SecretKey 与 region');
+    try {
+      final resp = await _http.head(req.uri, headers: req.headers);
+      if (resp.statusCode == 200) return true;
+      if (resp.statusCode == 403) {
+        throw StateError('存储桶找到了，但密钥或地域不对（403）。'
+            '请检查 SecretId / SecretKey，以及地域是否与创建桶时一致');
+      }
+      if (resp.statusCode == 404) {
+        throw StateError('存储桶不存在（404）。请确认桶名拼写完全一致，'
+            '含末尾账号数字，且地域与桶实际所在地一致');
+      }
+      throw StateError('连接失败：HTTP ${resp.statusCode}');
+    } on HandshakeException catch (e) {
+      throw StateError('HTTPS 握手失败（${e.message}）。\n'
+          '若桶名与地域确认无误，可能是当前网络对 COS 域名的拦截，'
+          '请换手机卡/网络（如移动数据）后重试');
     }
-    if (resp.statusCode == 404) {
-      throw StateError('存储桶不存在或名称不对（404），bucket 需带 AppId 后缀');
-    }
-    throw StateError('连接失败：HTTP ${resp.statusCode}');
   }
 
   /// 上传单个本地文件（分片 PUT，支持大图）。
