@@ -175,7 +175,7 @@ class SettingsPage extends ConsumerWidget {
   Future<List<Directory>> _listBackups(Directory root) async {
     final out = <Directory>[];
     await for (final e in root.list()) {
-      if (e is Directory && await File(p.join(e.path, 'app.db')).exists()) out.add(e as Directory);
+      if (e is Directory && await File(p.join(e.path, 'app.db')).exists()) out.add(e);
     }
     out.sort((a, b) => a.path.compareTo(b.path));
     return out;
