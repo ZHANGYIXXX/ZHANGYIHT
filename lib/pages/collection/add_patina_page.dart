@@ -193,7 +193,7 @@ class _AddPatinaPageState extends ConsumerState<AddPatinaPage> {
     setState(() => _saving = true);
     final rels = <String>[];
     for (final f in _pics) {
-      rels.add(await ImageStore.save('patina', widget.walnutId, File(f.path)));
+      rels.add(await ImageStore.savePatina('walnut', widget.walnutId, File(f.path)));
     }
     await PatinaDao.insert(Patina(
         ownerType: 'walnut', ownerId: widget.walnutId, date: date, images: rels));
