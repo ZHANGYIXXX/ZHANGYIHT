@@ -127,17 +127,23 @@ class CosClient {
   /// 依据腾讯云错误码给出可读的中文说明。
   static String _explain(String code, String fallback) {
     switch (code) {
+      case 'InvalidAccessKeyId':
+        return 'SecretId 无效：不存在、已删除，或复制时带了空格。'
+            '请到「访问管理 → API 密钥管理」重新完整复制（仅 ID，不含 SecretKey）。';
       case 'SignatureDoesNotMatch':
         return '签名不匹配。SecretId/SecretKey 填错或填反了（SecretKey 只显示一次，'
-            '不要带引号和空格）；也可能是设备时间偏差过大。';
+            '不要带引号和空格）；也可能是设备时间偏差过大，请把手机时间设为「自动」。';
       case 'AccessDenied':
         return '密钥有效但没有该存储桶的权限。确认用的是主账号密钥，'
             '或子账号已获得 COS 相关权限。';
       case 'NoSuchBucket':
-        return '存储桶不存在。桶名必须与控制台完全一致，且含末尾账号数字，'
-            '例如 yizhanghe-1250000000。';
+        return '存储桶不存在或地域不对。桶名必须与控制台完全一致且含末尾账号数字'
+            '（例如 yizhanghe-1250000000）；若桶建在其他地域，'
+            '需把地域改成对应值（如 ap-beijing）。';
       case 'InvalidArgument':
-        return '请求参数被腾讯云判为非法。常见是桶名或地域填错。';
+        return '腾讯云认为该请求不合法。若桶名与地域已确认无误，'
+            '通常是用错了 COS 操作（桶根不支持 HEAD / 无参 GET）。'
+            '请把报错截图发我，附上操作步骤以便定位。';
       case 'RequestTimeTooSkewed':
         return '设备时间与服务器相差过大。请把手机时间设为「自动」。';
       default:
@@ -145,7 +151,14 @@ class CosClient {
     }
   }
 
-  /// 连通性探测：HEAD 存储桶根，判断密钥与地域是否正确。
+  /// 连通性探测：用 `GET /?max-keys=1` 列出桶内 1 个对象。
+  ///
+  /// 【踩坑记录】此前用 `HEAD /` 探测，COS **不支持对桶根做 HEAD**，
+  /// 一律返回 400 InvalidArgument，导致误判成「桶名/地域填错」。
+  /// `GET /`（列桶）同样非法。实测只有带 list 类型的查询参数才合法：
+  ///   GET /            → 400 InvalidArgument
+  ///   HEAD /→ 400 InvalidArgument
+  ///   GET /?max-keys=1 → 403 InvalidAccessKeyId（说明请求已通过前置校验，走到验签）
   /// 成功返回 true；失败抛 [StateError] 并带上可读原因。
   Future<bool> testConnection() async {
     // 前置校验：Bucket 名格式错会导致 TLS 握手直接失败，
@@ -162,15 +175,14 @@ class CosClient {
           '注意只能是英文小写字母、数字、短横线，不能用中文。');
     }
 
-    final req = _signedRequest('HEAD', '');
+    final req = _signedRequest('GET', '', query: {'max-keys': '1'});
     try {
-      final resp = await _http.head(req.uri, headers: req.headers);
+      final resp = await _http.get(req.uri, headers: req.headers);
+      // 200 = 密钥有效且有权限；403 中带InvalidAccessKeyId 说明密钥本身不对
       if (resp.statusCode == 200) return true;
-      // HEAD 响应没有 body，改用同签名的 GET 再取一次，便于拿到腾讯云的错误码
-      final probe = _signedRequest('GET', '');
-      final probeResp = await _http.get(probe.uri, headers: probe.headers);
-      final err = _parseCosError(probeResp.body);
-      final reason = _explain(err.code, 'HTTP ${resp.statusCode}${err.code.isEmpty ? '' : '（${err.code}）'}');
+      final err = _parseCosError(resp.body);
+      final reason = _explain(
+          err.code, 'HTTP ${resp.statusCode}${err.code.isEmpty ? '' : '（${err.code}）'}');
       throw StateError(reason);
     } on HandshakeException catch (e) {
       throw StateError('HTTPS 握手失败（${e.message}）。\n'
